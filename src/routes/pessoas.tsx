@@ -26,6 +26,7 @@ function SelectionRoute() {
         await navigate({ to: '/' })
         journey.end()
       }}
+      onContinue={() => navigate({ to: '/data' })}
       onSessionExpired={async () => {
         await navigate({ to: '/', search: { motivo: 'sessao-expirada' }, replace: true })
         journey.end()

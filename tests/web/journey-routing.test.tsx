@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router'
 import { useEffect } from 'react'
@@ -42,13 +42,21 @@ const member: IdentifiedMember = {
   session: { token: 'token-da-sessao', expiresAt: Date.now() + 1_800_000 },
 }
 
-/** Simula a identificação concluída e o avanço para a seleção, como o botão "Escolher pessoas". */
-function begin(router: ReturnType<typeof createRouter<typeof routeTree>>) {
+interface Start {
+  to?: '/pessoas' | '/data'
+  selected?: Id<'householdLinks'>[]
+  date?: string | null
+}
+
+/** Simula a identificação concluída e o avanço, como os botões das etapas anteriores. */
+function begin(router: ReturnType<typeof createRouter<typeof routeTree>>, start: Start) {
   function Begin() {
     const journey = useJourney()
     useEffect(() => {
       journey.begin(member)
-      void router.navigate({ to: '/pessoas' })
+      if (start.selected) journey.setSelectedLinkIds(start.selected)
+      if (start.date) journey.setUsageDate(start.date)
+      void router.navigate({ to: start.to ?? '/pessoas' })
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
     return null
@@ -56,15 +64,16 @@ function begin(router: ReturnType<typeof createRouter<typeof routeTree>>) {
   return <Begin />
 }
 
-function renderAt(path: string, options: { identified?: boolean } = {}) {
+function renderAt(path: string, options: { identified?: boolean | Start } = {}) {
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: [options.identified ? '/' : path] }),
   })
+  const start = typeof options.identified === 'object' ? options.identified : {}
   render(
     <JourneyProvider>
       <RouterProvider router={router} />
-      {options.identified ? begin(router) : null}
+      {options.identified ? begin(router, start) : null}
     </JourneyProvider>,
   )
   return router
@@ -112,5 +121,60 @@ describe('roteamento da jornada', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/'))
     expect(await screen.findByRole('heading', { name: 'Identifique-se' })).toBeTruthy()
+  })
+
+  it('abrir /data sem identificação volta à identificação', async () => {
+    const router = renderAt('/data')
+    expect(await screen.findByText('Identifique-se para continuar')).toBeTruthy()
+    expect(router.state.location.pathname).toBe('/')
+  })
+
+  it('identificado, mas sem pessoas escolhidas, /data volta à seleção', async () => {
+    const router = renderAt('/data', { identified: { to: '/data' } })
+    expect(await screen.findByRole('heading', { name: 'Quem utilizará as piscinas?' })).toBeTruthy()
+    expect(router.state.location.pathname).toBe('/pessoas')
+  })
+
+  it('com pessoas escolhidas, /data mostra a etapa da data sem expor a prova na URL', async () => {
+    const router = renderAt('/data', {
+      identified: { to: '/data', selected: ['l1' as Id<'householdLinks'>] },
+    })
+    expect(
+      await screen.findByRole('heading', { name: 'Quando pretende utilizar as piscinas?' }),
+    ).toBeTruthy()
+    expect(router.state.location.pathname).toBe('/data')
+    expect(router.state.location.href).not.toContain('token')
+    expect(screen.getByText('Bruno Teste Almeida')).toBeTruthy()
+    expect(window.localStorage.length).toBe(0)
+    expect(window.sessionStorage.length).toBe(0)
+  })
+
+  it('"Voltar" da data preserva a seleção e a data; mudar a seleção descarta a data', async () => {
+    const user = userEvent.setup()
+    const router = renderAt('/data', {
+      identified: { to: '/data', selected: ['l1' as Id<'householdLinks'>], date: '2026-11-20' },
+    })
+    const dateField = async () =>
+      (await screen.findByLabelText('Data de utilização')) as HTMLInputElement
+    expect((await dateField()).value).toBe('2026-11-20')
+
+    // Voltar: a seleção continua marcada e a data continua guardada.
+    await user.click(screen.getByRole('button', { name: 'Voltar' }))
+    await screen.findByRole('heading', { name: 'Quem utilizará as piscinas?' })
+    expect(router.state.location.pathname).toBe('/pessoas')
+    expect((screen.getByRole('checkbox', { name: /Bruno/ }) as HTMLInputElement).checked).toBe(true)
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeTruthy()
+
+    // Sem mudar nada, a data é a mesma ao voltar à etapa.
+    await act(() => router.navigate({ to: '/data' }))
+    expect((await dateField()).value).toBe('2026-11-20')
+
+    // Mudou a seleção: a data escolhida deixa de valer.
+    await user.click(screen.getByRole('button', { name: 'Voltar' }))
+    await screen.findByRole('heading', { name: 'Quem utilizará as piscinas?' })
+    await user.click(screen.getByText('Ana Teste Almeida'))
+    await act(() => router.navigate({ to: '/data' }))
+    expect((await dateField()).value).toBe('')
+    expect(screen.getByText('Ana Teste Almeida')).toBeTruthy()
   })
 })

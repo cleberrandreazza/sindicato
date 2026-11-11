@@ -1,11 +1,11 @@
-import { ArrowRight, CalendarDays, Loader2 } from 'lucide-react'
+import { ArrowRight, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { formatBRL, type SelectionSummary as Summary } from '../lib/summary'
 
 interface SelectionSummaryProps {
   summary: Summary
   isValidating: boolean
-  /** Seleção já validada pelo backend: a próxima etapa (data) ainda não existe. */
+  /** Seleção validada pelo backend: a tela está passando para a escolha da data. */
   isValidated: boolean
   onContinue: () => void
 }
@@ -22,6 +22,7 @@ export function SelectionSummary({
   onContinue,
 }: SelectionSummaryProps) {
   const isEmpty = summary.quantity === 0
+  const isBusy = isValidating || isValidated
 
   return (
     <section
@@ -59,49 +60,31 @@ export function SelectionSummary({
           </p>
         ) : null}
 
-        {isValidated ? (
-          <>
-            <Button
-              type="button"
-              size="xl"
-              className="mt-3 w-full"
-              disabled
-              aria-describedby="date-soon"
-            >
-              <CalendarDays aria-hidden="true" />
-              Informar a data
-            </Button>
-            <p id="date-soon" className="mt-2 text-center text-sm text-muted-foreground">
-              Esta etapa estará disponível em breve.
-            </p>
-          </>
-        ) : (
-          <Button
-            type="button"
-            size="xl"
-            className="mt-3 w-full aria-disabled:pointer-events-none aria-disabled:opacity-80"
-            // Sem pessoas: realmente desabilitado. Validando: continua focável, mas inerte.
-            disabled={isEmpty}
-            aria-disabled={isValidating || undefined}
-            aria-describedby={isEmpty ? 'selection-guidance' : undefined}
-            onClick={onContinue}
-          >
-            {isValidating ? (
-              <>
-                <Loader2 aria-hidden="true" className="animate-spin" />
-                Validando…
-              </>
-            ) : (
-              <>
-                Continuar
-                <ArrowRight aria-hidden="true" />
-              </>
-            )}
-          </Button>
-        )}
+        <Button
+          type="button"
+          size="xl"
+          className="mt-3 w-full aria-disabled:pointer-events-none aria-disabled:opacity-80"
+          // Sem pessoas: realmente desabilitado. Validando: continua focável, mas inerte.
+          disabled={isEmpty}
+          aria-disabled={isBusy || undefined}
+          aria-describedby={isEmpty ? 'selection-guidance' : undefined}
+          onClick={onContinue}
+        >
+          {isBusy ? (
+            <>
+              <Loader2 aria-hidden="true" className="animate-spin" />
+              {isValidated ? 'Continuando…' : 'Validando…'}
+            </>
+          ) : (
+            <>
+              Continuar
+              <ArrowRight aria-hidden="true" />
+            </>
+          )}
+        </Button>
 
         <p role="status" className="sr-only">
-          {isValidating ? 'Validando a seleção. Aguarde.' : ''}
+          {isBusy ? 'Validando a seleção. Aguarde.' : ''}
         </p>
       </div>
     </section>

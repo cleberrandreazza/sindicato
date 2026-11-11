@@ -11,14 +11,14 @@ pessoas e a data de utilização e paga via Pix ou cartão em até 15 minutos.
 > reais (cadastro do sindicato, Stripe, e-mail/WhatsApp) ainda não existem; o desenvolvimento usa
 > mocks. Este projeto **não** é um sistema geral de reservas.
 
-| Etapa da jornada      | Situação                                                                    |
-| --------------------- | --------------------------------------------------------------------------- |
-| 1. Identificação      | Implementada (`/`)                                                          |
-| 2. Seleção de pessoas | Implementada (`/pessoas`); valida a seleção no backend e para antes da data |
-| 3. Data de utilização | Não implementada (backend pronto: `checkDuplicates`, `createOperation`)     |
-| 4. Resumo             | Não implementada                                                            |
-| 5. Pagamento          | Não implementada (backend pronto: `startPayment`, `getOperation`)           |
-| 6. Comprovante        | Não implementada (backend gera o comprovante; falta a tela e o envio real)  |
+| Etapa da jornada      | Situação                                                                      |
+| --------------------- | ----------------------------------------------------------------------------- |
+| 1. Identificação      | Implementada (`/`)                                                            |
+| 2. Seleção de pessoas | Implementada (`/pessoas`); valida a seleção no backend e para antes da data   |
+| 3. Data de utilização | Implementada (`/data`); regra **provisória**: qualquer data de hoje em diante |
+| 4. Resumo             | Não implementada                                                              |
+| 5. Pagamento          | Não implementada (backend pronto: `startPayment`, `getOperation`)             |
+| 6. Comprovante        | Não implementada (backend gera o comprovante; falta a tela e o envio real)    |
 
 ## Stack
 
@@ -90,11 +90,32 @@ A rota `/pessoas` é a segunda etapa ("Quem utilizará as piscinas?"). Parte da 
   [docs/business-rules.md](docs/business-rules.md#seleção-de-pessoas).
 - **Mobile:** em telas estreitas o resumo e o botão ficam fixos na base, respeitando a área
   segura do aparelho (`viewport-fit=cover` + `env(safe-area-inset-bottom)`), sem cobrir conteúdo.
-- **Próxima etapa:** após validar, a tela confirma a seleção e indica que a data virá em seguida
-  (ainda não implementada).
+- **Próxima etapa:** validada a seleção, a jornada segue para a [data de utilização](#tela-de-data-de-utilização).
 
 Organização: `src/features/selection/` (`api/`, `lib/`, `hooks/`, `components/`), no mesmo padrão
 da identificação. Capturas em `docs/screenshots/<largura>-s<n>-<estado>.png`.
+
+### Tela de data de utilização
+
+A rota `/data` é a terceira etapa ("Quando pretende utilizar as piscinas?"). Exige associado
+identificado e pessoas selecionadas (senão volta para `/` ou `/pessoas`).
+
+> **Regra provisória de desenvolvimento:** qualquer data de hoje em diante é aceita. Isso **não**
+> confirma que as piscinas funcionam ou estão disponíveis no dia: dias e horários de
+> funcionamento, antecedência, feriados e períodos de fechamento ainda não foram informados pelo
+> sindicato e **não foram inventados**. A tela exibe esse aviso e o repete ao aceitar a data.
+
+- **Data de calendário:** `usageDate` é texto `YYYY-MM-DD` (campo `<input type="date">`), sem
+  `Date`, hora nem fuso, para o dia não mudar por conversão UTC. "Hoje" usa o calendário de
+  `America/Sao_Paulo` (a confirmar). Datas passadas são bloqueadas; hoje é aceito.
+- **Validação:** usa o contrato existente `public/payments:checkDuplicates` (nenhuma função
+  pública nova): o backend valida a data, revalida a seleção e informa conflitos. Em conflito, a
+  tela lista só os nomes devolvidos pelo backend.
+- **Estado:** a data fica em memória no `JourneyProvider`. Qualquer mudança na seleção de pessoas
+  descarta a data e a validação. "Voltar" preserva a seleção.
+- **Próxima etapa:** após aceita, o resumo ainda não existe (botão desabilitado).
+
+Organização: `src/features/usage-date/` (`api/`, `lib/`, `hooks/`, `components/`).
 
 ### Variáveis do backend (deployment Convex)
 
@@ -172,8 +193,8 @@ src/
     ui/           componentes shadcn/ui
     shared/       componentes reutilizáveis do projeto
     layout/       estrutura das telas da jornada (JourneyLayout)
-  features/       módulos por funcionalidade: identification e selection (prontos); previstos:
-                  usage-date, summary, pool-payment, payment-status, receipts, admin
+  features/       módulos por funcionalidade: identification, selection e usage-date (prontos);
+                  previstos: summary, pool-payment, payment-status, receipts, admin
   lib/            utilitários e configuração (cn, env, cliente Convex, with-timeout, public-error)
   services/       adaptadores do frontend (chamadas ao Convex), quando necessário
   types/          tipos compartilhados

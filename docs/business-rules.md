@@ -44,6 +44,8 @@ O sindicato ainda não forneceu as regras abaixo. **Nenhuma foi inventada**: o c
 | Dias de funcionamento das piscinas          | Qualquer data não passada é aceita                                                                             |
 | Horários de funcionamento                   | Não considerados                                                                                               |
 | Antecedência mínima ou máxima               | Sem limites (exceto "não pode ser passada")                                                                    |
+| Feriados e datas excepcionais               | Não considerados; nenhuma data futura é bloqueada                                                              |
+| Períodos de fechamento das piscinas         | Não considerados; nenhuma data futura é bloqueada                                                              |
 | Isenção para crianças                       | Não existe; todos pagam R$ 30,00                                                                               |
 | Isenção para idosos                         | Não existe; todos pagam R$ 30,00                                                                               |
 | Faixas etárias com preços diferentes        | Não existem; preço único                                                                                       |
@@ -132,14 +134,65 @@ recusa vínculos de outro titular (`link_not_found`) e a mesma pessoa repetida
 diretamente leva de volta à identificação. Prova expirada ou inválida durante a seleção também
 leva de volta à identificação, com aviso. A seleção feita não é guardada ao voltar.
 
-**Não faz parte desta etapa:** escolha da data, checagem de duplicidade por data, criação da
-operação e pagamento (próximas etapas). Após a validação, o botão "Informar a data" aparece
-desabilitado com "Esta etapa estará disponível em breve."
+**Não faz parte desta etapa:** checagem de duplicidade por data, criação da
+operação e pagamento. Depois que o backend valida a seleção, a jornada segue direto para a
+[escolha da data](#data-de-utilização).
 
 **Ainda pendente do sindicato** (nada foi inventado; ver a tabela de
 [regras pendentes](#regras-pendentes)): limite de pessoas por operação, critérios de
 elegibilidade além da situação cadastral, texto oficial da mensagem de inelegibilidade e o
 tratamento de dependentes de titular inativo.
+
+## Data de utilização
+
+Terceira etapa da jornada (tela "Quando pretende utilizar as piscinas?", rota `/data`).
+Implementação em `src/features/usage-date/`; a validação de verdade é do backend
+(`usagePolicy.checkUsageDate`, ver [Datas e fuso horário](#datas-e-fuso-horário)).
+
+> **Regra PROVISÓRIA de desenvolvimento.** Hoje o sistema aceita **qualquer data de hoje em
+> diante**. Isso **não** é uma confirmação de que as piscinas funcionam ou têm vaga naquele dia:
+> o sindicato ainda não informou dias, horários, feriados, períodos de fechamento nem limites de
+> antecedência. Nenhum desses foi inventado, e nenhum dia da semana é bloqueado. A tela repete
+> esse aviso o tempo todo ("Regra provisória") e novamente ao aceitar uma data.
+
+**Regras confirmadas (aplicadas hoje):**
+
+- **A data é obrigatória.** Sem data, o botão não consulta o backend e a tela pede a data.
+- **Datas passadas são bloqueadas; hoje é aceito.** "Hoje" é o dia do calendário de
+  `America/Sao_Paulo` (fuso ainda sujeito à confirmação do sindicato), não o do aparelho.
+- **A seleção de pessoas da etapa anterior é preservada** e exibida (só as escolhidas). "Voltar"
+  retorna à seleção sem perdê-la.
+
+**Como a data é tratada.** `usageDate` é uma **data de calendário** `YYYY-MM-DD`: texto, sem hora
+e sem fuso. O campo é o `<input type="date">` nativo, que já entrega esse formato; a data nunca
+vira `Date` local nem instante, para que o dia não mude por conversão UTC. A exibição por extenso
+("sexta-feira, 20 de novembro de 2026") é calculada em UTC a partir dos mesmos números. A mesma
+data segue ao backend como veio.
+
+**Validação.** Ao continuar, a tela confere localmente (vazia, inexistente, passada) só para
+orientar e então consulta o backend por `public/payments:checkDuplicates`, contrato que **já
+existia** (nenhuma função pública foi criada). O servidor valida de novo a data
+(`invalid_usage_date`, `past_usage_date`), revalida a seleção e informa conflitos. A decisão final
+é sempre do servidor, que repete a verificação em `createOperation`. Relógio do aparelho errado
+não burla nada: o backend recusa e a tela mostra o texto dele.
+
+**Conflito de duplicidade.** Se alguma pessoa **da própria seleção** já tem operação pendente,
+paga ou em análise naquela data, a tela lista **apenas os nomes devolvidos pelo backend** e não
+deixa avançar; o associado escolhe outra data ou volta e retira essas pessoas. A tela não mostra
+de quem é a operação conflitante, valores nem identificadores, e o backend não os envia.
+
+**Invalidação.** A data escolhida vale para **aquele conjunto de pessoas**. Qualquer alteração na
+seleção (marcar, desmarcar ou trocar alguém) **descarta a data** e o resultado da validação.
+Reenviar a mesma seleção não descarta. Mudar a data descarta o resultado da validação anterior, e
+o resultado só é exibido para a data para a qual foi obtido.
+
+**Não faz parte desta etapa:** resumo final, criação da operação e pagamento. Depois de aceita, o
+botão "Ver o resumo" aparece desabilitado com "Esta etapa estará disponível em breve."
+
+**Ainda pendente do sindicato** (nada foi inventado; ver [regras pendentes](#regras-pendentes)):
+dias e horários de funcionamento, antecedência mínima e máxima, feriados e datas excepcionais,
+períodos de fechamento e confirmação do fuso `America/Sao_Paulo`. Quando existirem, entram na
+`UsagePolicy` (backend) e a tela passa a mostrar as datas indisponíveis a partir da resposta dele.
 
 ## Estados da operação
 

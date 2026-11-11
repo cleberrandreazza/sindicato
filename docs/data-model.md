@@ -114,13 +114,18 @@ erDiagram
 | Datas: lógica isolada em `domain/time.ts`                                        | Estratégia de fuso documentada e testada; `todayInTimeZone` virou `businessCalendarDate`.                |
 | Códigos de erro `dependent_not_found/inactive` → `link_not_found/inactive`       | Consequência da troca de modelo; mesma regra (vínculo inexistente ou inativo é recusado).                |
 
-### Telas de identificação e seleção (frontend)
+### Telas de identificação, seleção e data (frontend)
 
-**Nenhuma mudança de schema, índice ou tabela.** As duas primeiras telas só leem o que já existe
-(`members`, `people`, `householdLinks`, `identificationSessions`) pelas funções públicas
-`members:lookup` e `members:validateSelection`. A seleção feita na tela **não é persistida**: ela
-só vira dado (`operationPeople`) quando a operação é criada, em etapa futura. O navegador
-identifica cada pessoa pelo id do vínculo (`householdLinks`), nunca pelo `personId`.
+**Nenhuma mudança de schema, índice ou tabela.** As três primeiras telas só leem o que já existe
+(`members`, `people`, `householdLinks`, `identificationSessions`, `operationPeople` para
+conflitos) pelas funções públicas `members:lookup`, `members:validateSelection` e
+`payments:checkDuplicates`. A seleção e a data feitas na tela **não são persistidas**: só viram
+dado (`operationPeople`, `paymentOperations.usageDate`) quando a operação é criada, em etapa
+futura. O navegador identifica cada pessoa pelo id do vínculo (`householdLinks`), nunca pelo
+`personId`. A data segue como `usageDate` (`YYYY-MM-DD`, ver
+[Datas e fuso horário](#datas-e-fuso-horário)), sem conversão. Tabelas e regras de data
+continuam as mesmas; a aceitação de "qualquer data de hoje em diante" é provisória
+(ver [business-rules.md](./business-rules.md#data-de-utilização)).
 
 ## Estado financeiro × estado operacional
 

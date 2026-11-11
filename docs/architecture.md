@@ -100,12 +100,13 @@ tests/                domain/ (puros), convex/ (convex-test) e web/ (interface)
 
 ```text
 src/
-  routes/                 arquivos de rota (TanStack Router): __root, index (/), pessoas (/pessoas)
+  routes/                 arquivos de rota (TanStack Router): __root, index (/), pessoas (/pessoas), data (/data)
   app/providers/          AppConvexProvider e JourneyProvider (estado da jornada em memória)
   components/layout/      JourneyLayout (faixa azul + folha no mobile; painel dividido no desktop)
   components/ui/          componentes base (button, input, card, alert, text-field…)
   features/identification/  etapa 1: api/ lib/ hooks/ components/
   features/selection/       etapa 2: api/ lib/ hooks/ components/
+  features/usage-date/      etapa 3: api/ lib/ hooks/ components/
   lib/                    cliente Convex, env, withTimeout, readPublicError
 ```
 
@@ -114,13 +115,13 @@ puras que interpretam respostas), `hooks/` (estado da tela) e `components/` (apr
 componentes recebem os dados e as ações por props; não importam o cliente Convex.
 
 **Estado da jornada.** `JourneyProvider` (contexto React) guarda o associado identificado
-(incluindo a prova de 30 min) e os `linkId` selecionados **apenas em memória**. Nada vai para
+(incluindo a prova de 30 min), os `linkId` selecionados e a data de utilização (`usageDate`, texto `YYYY-MM-DD`) **apenas em memória**. Nada vai para
 `localStorage`, `sessionStorage`, cookie ou URL; recarregar a página recomeça pela identificação.
 O único dado na URL é o motivo do retorno (`/?motivo=sessao-expirada` ou
 `identificacao-necessaria`), sempre normalizado por `parseReturnReason` (valores desconhecidos
 são ignorados) e sem nenhum dado pessoal.
 
-**Fluxo das duas primeiras telas:**
+**Fluxo das três primeiras telas:**
 
 ```mermaid
 sequenceDiagram
@@ -146,6 +147,53 @@ sequenceDiagram
     P->>I: volta com ?motivo=sessao-expirada
   end
 ```
+
+**Etapa 3 (`/data`): data de utilização.**
+
+```mermaid
+sequenceDiagram
+  participant U as Associado
+  participant P as /pessoas
+  participant D as /data
+  participant J as JourneyProvider
+  participant C as Convex (API pública)
+  P->>D: seleção validada (navega)
+  Note over D: guarda: sem associado → /; sem pessoas → /pessoas
+  U->>D: escolhe a data (YYYY-MM-DD)
+  D->>J: setUsageDate
+  D->>D: confere local: vazia / inexistente / passada
+  D->>C: payments:checkDuplicates (memberId, prova, linkIds, usageDate)
+  alt aceita, sem conflitos
+    C-->>D: ok, hasConflicts=false
+  else conflito
+    C-->>D: ok, conflicts=[{linkId, name}]
+    D-->>U: lista só os nomes devolvidos
+  else recusa (data passada/inválida, seleção)
+    C-->>D: ok=false + código e mensagem
+  else prova inválida
+    C-->>D: erro session_invalid / member_not_found
+    D->>P: volta à identificação (?motivo=sessao-expirada)
+  end
+  U->>P: "Voltar" (seleção e data preservadas)
+  U->>J: muda a seleção → usageDate = null
+```
+
+- **Nenhum contrato novo.** A tela reutiliza `public/payments:checkDuplicates`, que já valida a
+  data (`usagePolicy.checkUsageDate`), revalida a seleção e informa conflitos. A decisão final é
+  repetida em `createOperation`.
+- **Data de calendário.** `usageDate` é texto `YYYY-MM-DD` de ponta a ponta (campo nativo →
+  estado da jornada → backend). Não há `new Date('YYYY-MM-DD')` (seria meia-noite UTC, ainda
+  "ontem" em São Paulo). "Hoje" usa `businessCalendarDate` (a mesma função do backend, fuso
+  `America/Sao_Paulo`) e a exibição por extenso é feita em UTC sobre os mesmos números.
+- **Invalidação.** `JourneyProvider.setSelectedLinkIds` descarta `usageDate` sempre que a seleção
+  muda (inclusive trocar uma pessoa por outra); reenviar a mesma seleção não descarta. O
+  resultado da validação vive só na tela e é exibido apenas para a data a que se refere.
+- **Regra provisória.** Aceitar qualquer data de hoje em diante é provisório (sem dias de
+  funcionamento, horários, antecedência, feriados ou fechamentos, ainda não informados pelo
+  sindicato). A tela diz isso explicitamente. Quando houver regras, elas entram na `UsagePolicy`
+  do backend, sem mudar este fluxo.
+- **Privacidade no conflito.** A tela mostra só `name` das pessoas da própria seleção, como o
+  backend devolve. O `linkId` não é exibido e nada indica quem é o dono da operação conflitante.
 
 **Regras da interface (a interface não decide regras):**
 
@@ -529,9 +577,13 @@ concorrentes → 1 vencedora), não a serialização real.
 
 22. **Estado da jornada só em memória.** A prova de identificação e a seleção não são persistidas
     no navegador; recarregar recomeça. Troca praticidade por menos exposição de dados e evita
-    prova antiga reaproveitada.
-23. **A interface nunca decide regras.** Elegibilidade (`selectable`), validade da seleção e valor
-    são do backend; o resumo de valores na tela é informativo.
+    prova antiga reaproveitada. A data de utilização escolhida também só vive em memória.
+23. **A interface nunca decide regras.** Elegibilidade (`selectable`), validade da seleção, da data
+    e valor são do backend; o resumo de valores na tela é informativo.
+24. **Data como data de calendário, validada pelo backend.** `usageDate` nunca é convertido em
+    `Date`/instante no navegador; a regra "de hoje em diante" é provisória e reside em
+    `UsagePolicy`. A seleção de pessoas e a data são validadas juntas, e mudar a seleção descarta a
+    data.
 
 ## Ambiente
 

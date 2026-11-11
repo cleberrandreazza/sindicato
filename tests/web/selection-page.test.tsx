@@ -38,12 +38,13 @@ const member: IdentifiedMember = {
 interface HarnessProps {
   validate: ValidateSelectionFn
   onBack?: () => void
+  onContinue?: () => void
   onSessionExpired?: () => void
   initial?: Id<'householdLinks'>[]
 }
 
 /** A página é controlada; o harness faz o papel do contexto da jornada. */
-function Harness({ validate, onBack, onSessionExpired, initial = [] }: HarnessProps) {
+function Harness({ validate, onBack, onContinue, onSessionExpired, initial = [] }: HarnessProps) {
   const [selected, setSelected] = useState<readonly Id<'householdLinks'>[]>(initial)
   return (
     <SelectionPage
@@ -51,6 +52,7 @@ function Harness({ validate, onBack, onSessionExpired, initial = [] }: HarnessPr
       selectedLinkIds={selected}
       onSelectionChange={setSelected}
       onBack={onBack ?? (() => {})}
+      onContinue={onContinue ?? (() => {})}
       onSessionExpired={onSessionExpired ?? (() => {})}
       validate={validate}
     />
@@ -65,13 +67,19 @@ const validResult = (quantity: number): ValidateSelectionResult => ({
 
 function setup(props: Partial<HarnessProps> = {}) {
   const validate = props.validate ?? vi.fn<ValidateSelectionFn>(async () => validResult(1))
+  const onContinue = props.onContinue ?? vi.fn()
   const user = userEvent.setup()
-  render(<Harness {...props} validate={validate} />)
+  render(<Harness {...props} validate={validate} onContinue={onContinue} />)
   return {
     user,
     validate,
+    onContinue,
+    /** Aguarda a passagem para a etapa da data (a rota faz a navegação de fato). */
+    async expectContinued(times = 1) {
+      await waitFor(() => expect(onContinue).toHaveBeenCalledTimes(times))
+    },
     card: (name: RegExp | string) => screen.getByRole('checkbox', { name }) as HTMLInputElement,
-    continueButton: () => screen.getByRole('button', { name: /Continuar|Validando/ }),
+    continueButton: () => screen.getByRole('button', { name: /Continuar|Continuando|Validando/ }),
     summary: () => screen.getByRole('region', { name: 'Resumo da seleção' }),
   }
 }
@@ -181,23 +189,21 @@ describe('SelectionPage', () => {
     expect(ui.card(/Eduardo/).checked).toBe(false)
 
     resolve(validResult(2))
-    expect(await screen.findByText('Seleção validada')).toBeTruthy()
+    await ui.expectContinued()
   })
 
-  it('seleção válida: confirma, informa que a data é a próxima etapa e não usa armazenamento do navegador', async () => {
+  it('seleção válida: segue para a escolha da data, sem sobras e sem usar armazenamento do navegador', async () => {
     const ui = setup({ validate: vi.fn<ValidateSelectionFn>(async () => validResult(2)) })
     await ui.user.click(screen.getByText('Daniela Modelo Lima'))
     await ui.user.click(screen.getByText('Fernanda Modelo Lima'))
     await ui.user.click(ui.continueButton())
 
-    const title = await screen.findByText('Seleção validada')
-    const alert = title.closest('[data-slot="alert"]') as HTMLElement
-    expect(alert.textContent).toContain('2 pessoas · R$ 60,00')
-    await waitFor(() => expect(document.activeElement).toBe(alert))
-
-    const next = screen.getByRole('button', { name: /Informar a data/ }) as HTMLButtonElement
-    expect(next.disabled).toBe(true)
-    expect(screen.queryByRole('button', { name: /^Continuar/ })).toBeNull()
+    await ui.expectContinued()
+    // Enquanto a rota troca de tela, o botão fica inerte e não se oferece outra validação.
+    expect(ui.continueButton().textContent).toContain('Continuando')
+    expect(ui.continueButton().getAttribute('aria-disabled')).toBe('true')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Informar a data/ })).toBeNull()
 
     expect(window.localStorage.length).toBe(0)
     expect(window.sessionStorage.length).toBe(0)
@@ -205,15 +211,30 @@ describe('SelectionPage', () => {
     expect(document.body.textContent).not.toContain('token-da-sessao')
   })
 
+  it('seleção recusada ou indisponível não segue para a data', async () => {
+    const onContinue = vi.fn()
+    const validate = vi.fn<ValidateSelectionFn>(async () => ({
+      ok: false,
+      code: 'link_inactive',
+      message: 'Uma das pessoas selecionadas não está ativa no cadastro.',
+    }))
+    const ui = setup({ validate, onContinue })
+    await ui.user.click(screen.getByText('Daniela Modelo Lima'))
+    await ui.user.click(ui.continueButton())
+    await screen.findByText('Revise a seleção')
+    expect(onContinue).not.toHaveBeenCalled()
+  })
+
   it('alterar a seleção depois de validar exige validar de novo', async () => {
     const ui = setup({ validate: vi.fn<ValidateSelectionFn>(async () => validResult(1)) })
     await ui.user.click(screen.getByText('Daniela Modelo Lima'))
     await ui.user.click(ui.continueButton())
-    await screen.findByText('Seleção validada')
+    await ui.expectContinued()
+    expect(ui.continueButton().textContent).toContain('Continuando')
 
     await ui.user.click(screen.getByText('Eduardo Modelo Lima'))
-    expect(screen.queryByText('Seleção validada')).toBeNull()
     expect(ui.continueButton().textContent).toContain('Continuar')
+    expect(ui.continueButton().textContent).not.toContain('Continuando')
   })
 
   it('o titular é opcional: só dependentes podem ser validados, sem o titular', async () => {
@@ -225,7 +246,7 @@ describe('SelectionPage', () => {
     await ui.user.click(ui.continueButton())
 
     expect(validate.mock.calls[0]![0].linkIds).toEqual(['l-eduardo', 'l-fernanda'])
-    expect(await screen.findByText('Seleção validada')).toBeTruthy()
+    await ui.expectContinued()
   })
 
   it('o titular sozinho também pode ser validado, sem nenhum dependente', async () => {
@@ -236,7 +257,7 @@ describe('SelectionPage', () => {
     await ui.user.click(ui.continueButton())
 
     expect(validate.mock.calls[0]![0].linkIds).toEqual(['l-holder'])
-    expect(await screen.findByText('Seleção validada')).toBeTruthy()
+    await ui.expectContinued()
   })
 
   it('só dependentes marcados e depois desmarcados bloqueiam a continuidade de novo', async () => {
@@ -282,11 +303,12 @@ describe('SelectionPage', () => {
     const ui = setup({ validate })
     await ui.user.click(screen.getByText('Daniela Modelo Lima'))
     await ui.user.click(ui.continueButton())
-    await screen.findByText('Seleção validada')
+    await ui.expectContinued()
 
     await ui.user.click(screen.getByText('Daniela Modelo Lima')) // desmarca o titular
     await ui.user.click(screen.getByText('Fernanda Modelo Lima'))
     await ui.user.click(ui.continueButton())
+    await ui.expectContinued(2)
 
     expect(validate).toHaveBeenCalledTimes(2)
     expect(validate.mock.calls[1]![0].linkIds).toEqual(['l-fernanda'])
@@ -324,7 +346,7 @@ describe('SelectionPage', () => {
     expect(ui.card(/Daniela/).checked).toBe(true)
 
     await ui.user.click(screen.getByRole('button', { name: 'Tentar novamente' }))
-    await screen.findByText('Seleção validada')
+    await ui.expectContinued()
     expect(validate).toHaveBeenCalledTimes(2)
   })
 

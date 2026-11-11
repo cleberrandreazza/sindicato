@@ -1,11 +1,10 @@
-import { CircleCheck, TriangleAlert, WifiOff } from 'lucide-react'
+import { TriangleAlert, WifiOff } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import type { ValidationState } from '../hooks/use-selection-validation'
-import { formatBRL, peopleLabel, summarizeSelection } from '../lib/summary'
 
-type NoticeState = Extract<ValidationState, { status: 'valid' | 'rejected' | 'unavailable' }>
+type NoticeState = Extract<ValidationState, { status: 'rejected' | 'unavailable' }>
 
 interface SelectionNoticeProps {
   state: NoticeState
@@ -13,7 +12,7 @@ interface SelectionNoticeProps {
 }
 
 /**
- * Resultado da validação da seleção, acima da lista. Recebe o foco ao aparecer (o navegador
+ * Aviso da validação da seleção (recusa ou indisponibilidade), acima da lista. Recebe o foco ao aparecer (o navegador
  * também rola até ele), para que ninguém precise procurá-lo atrás da barra fixa.
  */
 export function SelectionNotice({ state, onRetry }: SelectionNoticeProps) {
@@ -24,21 +23,6 @@ export function SelectionNotice({ state, onRetry }: SelectionNoticeProps) {
   }, [])
 
   switch (state.status) {
-    case 'valid': {
-      const summary = summarizeSelection(state.quantity)
-      return (
-        <Alert ref={ref} tabIndex={-1} role="status" variant="success" className="mb-4">
-          <CircleCheck aria-hidden="true" />
-          <AlertTitle>Seleção validada</AlertTitle>
-          <AlertDescription>
-            <p>
-              {peopleLabel(state.quantity)} · {formatBRL(summary.totalAmountCents)}. Na próxima
-              etapa você informa a data de utilização.
-            </p>
-          </AlertDescription>
-        </Alert>
-      )
-    }
     case 'rejected':
       return (
         <Alert ref={ref} tabIndex={-1} role="alert" variant="warning" className="mb-4">

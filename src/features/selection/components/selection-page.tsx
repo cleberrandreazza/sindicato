@@ -17,6 +17,8 @@ interface SelectionPageProps {
   onSelectionChange: (linkIds: readonly Id<'householdLinks'>[]) => void
   /** Volta à identificação (encerrando a jornada atual). */
   onBack: () => void | Promise<void>
+  /** Seleção validada pelo backend: segue para a escolha da data. */
+  onContinue: () => void | Promise<void>
   /** A prova de identificação não vale mais: pedir nova identificação. */
   onSessionExpired: () => void | Promise<void>
   /** Permite substituir a validação (testes). Em produção usa o backend Convex. */
@@ -29,6 +31,7 @@ export function SelectionPage({
   selectedLinkIds,
   onSelectionChange,
   onBack,
+  onContinue,
   onSessionExpired,
   validate,
 }: SelectionPageProps) {
@@ -52,6 +55,7 @@ export function SelectionPage({
       linkIds: [...selectedLinkIds],
     })
     if (outcome?.kind === 'session_expired') void onSessionExpired()
+    if (outcome?.kind === 'valid') void onContinue()
   }
 
   return (
@@ -73,9 +77,7 @@ export function SelectionPage({
           Voltar
         </Button>
 
-        {state.status === 'valid' ||
-        state.status === 'rejected' ||
-        state.status === 'unavailable' ? (
+        {state.status === 'rejected' || state.status === 'unavailable' ? (
           <SelectionNotice state={state} onRetry={() => void handleContinue()} />
         ) : null}
 
