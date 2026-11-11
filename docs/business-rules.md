@@ -561,8 +561,10 @@ recusa sem `APP_ENV=development`).
 
 ## Regras da demonstração institucional (hospedada)
 
-Ambiente separado do desenvolvimento local e da futura produção. Detalhes operacionais em
-[deployment-guide.md](./deployment-guide.md).
+Ambiente separado do desenvolvimento local (`grateful-chipmunk-18`) e da futura produção.
+Backend de demo: projeto Convex `sindicato-demo` / `coordinated-mink-914` com
+`APP_ENV=demonstration` e providers mock. Frontend Vercel ainda pode estar pendente de
+publicação. Detalhes em [deployment-guide.md](./deployment-guide.md).
 
 | Regra                                   | Aplicação                                                                     |
 | --------------------------------------- | ----------------------------------------------------------------------------- |

@@ -24,18 +24,17 @@ React · TypeScript (strict) · Vite · TanStack Router · Tailwind CSS v4 · sh
 
 ## Ambientes
 
-| Ambiente     | Frontend          | Backend Convex                        | Providers                      |
-| ------------ | ----------------- | ------------------------------------- | ------------------------------ |
-| Local        | Vite (`pnpm dev`) | Deployment de desenvolvimento         | Mock (`APP_ENV=development`)   |
-| Demonstração | Vercel (HTTPS)    | **Deployment separado** (não o local) | Mock (`APP_ENV=demonstration`) |
-| Produção     | Vercel (futuro)   | Deployment de produção                | Reais; mocks **recusados**     |
+| Ambiente     | Frontend                | Backend Convex                                    | Providers                      |
+| ------------ | ----------------------- | ------------------------------------------------- | ------------------------------ |
+| Local        | Vite (`pnpm dev`)       | `grateful-chipmunk-18` (`APP_ENV=development`)    | Mock                           |
+| Demonstração | Vercel (**a publicar**) | Projeto `sindicato-demo` → `coordinated-mink-914` | Mock (`APP_ENV=demonstration`) |
+| Produção     | Vercel (futuro)         | Deployment sem mocks                              | Reais; mocks **recusados**     |
 
-O frontend recebe a URL do Convex via `VITE_CONVEX_URL` (única variável `VITE_*` usada pelo
-código). Segredos ficam só no deployment Convex. Guia completo:
-[docs/deployment-guide.md](docs/deployment-guide.md).
-
-> A demonstração hospedada **ainda não está publicada** neste repositório até existir uma URL
-> HTTPS externa validada. Este commit prepara a configuração; não substitui o Convex local.
+- Convex de demo (backend): `https://coordinated-mink-914.convex.cloud` — schema/funções
+  implantados; dados só fictícios.
+- Frontend na Vercel: **ainda sem URL HTTPS validada**. Quando existir, use
+  `VITE_CONVEX_URL=https://coordinated-mink-914.convex.cloud`.
+- Guia: [docs/deployment-guide.md](docs/deployment-guide.md).
 
 ## Documentação
 
@@ -225,12 +224,16 @@ sem `MEMBER_PROVIDER=mock`). Qualquer outro valor (incluindo ausência) **recusa
 
 ## Demonstração para a diretoria
 
+**Backend de demonstração:** pronto (`coordinated-mink-914`). **Frontend Vercel:** pendente de
+importação manual do GitHub (sem senha / Deployment Protection — acesso público institucional).
+
 Enquanto não houver URL Vercel validada, use o ambiente local ou o roteiro em
 [docs/demo-script.md](docs/demo-script.md). Quando a demo estiver no ar:
 
-1. Acesse a URL HTTPS da Vercel (pública ou com proteção de deployment, conforme o plano).
-2. Use somente os [dados fictícios](#dados-fictícios-de-teste-somente-desenvolvimento) abaixo.
+1. Acesse a URL HTTPS da Vercel (pública, sem senha).
+2. Use somente os [dados fictícios](#dados-fictícios-de-teste-somente-desenvolvimento--demonstração) abaixo.
 3. Checkout é **simulado**; não há pagamento real nem WhatsApp/e-mail reais.
+4. Checklist pós-publicação: [docs/deployment-guide.md](docs/deployment-guide.md).
 
 ## Dados fictícios de teste (somente desenvolvimento / demonstração)
 

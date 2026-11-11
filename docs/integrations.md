@@ -234,13 +234,15 @@ respondem depois que `APP_ENV` permite mocks — não precisam de seed no banco.
 
 ### Limitações do ambiente de demonstração hospedada
 
+- Projeto Convex dedicado: `sindicato-demo` / deployment `coordinated-mink-914`
+  (`https://coordinated-mink-914.convex.cloud`).
 - Providers mockados: nenhum Stripe, WhatsApp ou e-mail real.
 - Em `APP_ENV=demonstration`, a action pública `simulateDemoPayment` permite simular
   aprovado/recusado **somente** com o `accessToken` da operação e PaymentProvider mock; o
   navegador não envia status financeiro. Em produção a mesma action é recusada.
 - A CLI `dev/simulate:simulatePayment` continua interna (útil em development).
-- Proteção por senha, se desejada, deve ser da **hospedagem** (Vercel Deployment Protection), não
-  autenticação improvisada no React. Ver [deployment-guide.md](./deployment-guide.md).
+- Frontend na Vercel: URL **pública** (sem senha) para a diretoria; ausência de senha não expõe
+  funções internas. Ver [deployment-guide.md](./deployment-guide.md).
 
 Para adicionar uma integração real:
 

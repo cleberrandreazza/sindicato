@@ -22,11 +22,11 @@ flowchart LR
   FE_D -->|VITE_CONVEX_URL| CV_D
 ```
 
-| Ambiente        | Hospedagem frontend | Convex                        | `APP_ENV`       | Dados / providers      |
-| --------------- | ------------------- | ----------------------------- | --------------- | ---------------------- |
-| Desenvolvimento | Vite local          | Deployment de desenvolvimento | `development`   | Fictícios + mocks      |
-| Demonstração    | Vercel              | Deployment **separado**       | `demonstration` | Fictícios + mocks      |
-| Produção        | Vercel (futuro)     | Deployment de produção        | ≠ mock-allowed  | Reais; mocks recusados |
+| Ambiente        | Hospedagem frontend | Convex                                    | `APP_ENV`       | Dados / providers      |
+| --------------- | ------------------- | ----------------------------------------- | --------------- | ---------------------- |
+| Desenvolvimento | Vite local          | `grateful-chipmunk-18`                    | `development`   | Fictícios + mocks      |
+| Demonstração    | Vercel (a publicar) | `sindicato-demo` → `coordinated-mink-914` | `demonstration` | Fictícios + mocks      |
+| Produção        | Vercel (futuro)     | Deployment sem mocks                      | ≠ mock-allowed  | Reais; mocks recusados |
 
 - O frontend **nunca** embute segredos: só `VITE_CONVEX_URL` (ver `src/lib/env.ts`).
 - SPA na Vercel: [`vercel.json`](../vercel.json) reescreve rotas para `index.html` (TanStack Router).
