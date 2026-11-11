@@ -30,6 +30,9 @@ React · TypeScript (strict) · Vite · TanStack Router · Tailwind CSS v4 · sh
 - [Integrações externas](docs/integrations.md)
 - [Relatório de homologação](docs/homologation-report.md) (auditoria da 1ª entrega)
 - [Prontidão para apresentação](docs/presentation-readiness.md) (diretoria / sindicato)
+- [Apresentação institucional (slides)](docs/presentation/index.html) · [índice](docs/presentation.md)
+- [Roteiro de demonstração](docs/demo-script.md) (8–12 min)
+- [Decisões pendentes do sindicato](docs/decisions-for-syndicate.md)
 
 ## Requisitos
 

@@ -3,7 +3,7 @@
 **Data da auditoria:** 2026-11-11  
 **Commit base auditado:** `fc84c9baa33d6addb61474f971bccc47dcb9d9d9`  
 **Commit deste relatório / correções de homologação:** `df7daafe4f8abbe2e6e8f3580bbfd29074f357cc`  
-**Suíte na auditoria:** 34 arquivos / 595 testes aprovados  
+**Suíte na auditoria:** 34 arquivos / 595 testes aprovados
 
 **Branch:** `master`  
 **Ambiente:** desenvolvimento local (Windows), Vitest + `convex-test`, Node 22, pnpm
