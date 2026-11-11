@@ -1,8 +1,9 @@
 import { convexTest } from 'convex-test'
 import { ConvexError } from 'convex/values'
-import { expect } from 'vitest'
-import { internal } from '../../convex/_generated/api'
+import { expect, vi } from 'vitest'
+import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
+import { issueSession } from '../../convex/members/sessions'
 import schema from '../../convex/schema'
 
 const modules = import.meta.glob('../../convex/**/*.*s')
@@ -245,4 +246,132 @@ export function loadEvents(t: Backend, operationId: Id<'paymentOperations'>) {
 
 export function loadTransaction(t: Backend, transactionId: Id<'paymentTransactions'>) {
   return t.run((ctx) => ctx.db.get(transactionId))
+}
+
+// ---------------------------------------------------------------------------------------------
+// API pública
+// ---------------------------------------------------------------------------------------------
+
+/** Cadastros do provider mock (ver `convex/providers/mock/mockMembers.ts`). Dados fictícios. */
+export const MOCK = {
+  ana: { membershipNumber: '100001', cpf: '10000000108' }, // ativa, 2 dependentes (Bruno, Clara)
+  carlos: { membershipNumber: '100002', cpf: '10000000280' }, // ativo, sem dependentes
+  daniela: { membershipNumber: '100003', cpf: '10000000361' }, // ativa, 5 dependentes (1 inativo)
+  igor: { membershipNumber: '900004', cpf: '90000000418' }, // INATIVO
+} as const
+
+/** Configura o ambiente do deployment simulado (providers mock + segredo do HMAC do CPF). */
+export function stubPublicApiEnv() {
+  vi.stubEnv('APP_ENV', 'development')
+  vi.stubEnv('CPF_HASH_SECRET', 'segredo-de-teste-com-mais-de-16-chars')
+  vi.stubEnv('MEMBER_PROVIDER', 'mock')
+  vi.stubEnv('PAYMENT_PROVIDER', 'mock')
+  vi.stubEnv('NOTIFICATION_PROVIDER', 'mock')
+}
+
+export function lookup(t: Backend, input: { membershipNumber: string; cpf: string }) {
+  return t.action(api.public.members.lookup, input)
+}
+
+/** Identifica um associado do mock e devolve o resultado com a prova de identificação. */
+export async function identify(t: Backend, who: { membershipNumber: string; cpf: string }) {
+  const result = await lookup(t, who)
+  if (!result.session) throw new Error('Esperava uma prova de identificação.')
+  return { ...result, token: result.session.token }
+}
+
+/** Emite uma prova de identificação para um titular criado por `seedFamily`. */
+export function grantSession(t: Backend, memberId: Id<'members'>) {
+  return t.run(async (ctx) => (await issueSession(ctx, memberId, Date.now())).token)
+}
+
+export function publicCreate(
+  t: Backend,
+  fixture: Fixture,
+  token: string,
+  options: { usageDate?: string; linkIds?: Id<'householdLinks'>[] } = {},
+) {
+  return t.mutation(api.public.payments.createOperation, {
+    memberId: fixture.memberId,
+    identificationToken: token,
+    usageDate: options.usageDate ?? USAGE_DATE,
+    linkIds: options.linkIds ?? [fixture.holderLinkId, fixture.dependentLinkIds[0]],
+  })
+}
+
+// ---------------------------------------------------------------------------------------------
+// Cobranças
+// ---------------------------------------------------------------------------------------------
+
+export interface CreatedOperation {
+  operationId: Id<'paymentOperations'>
+  accessToken: string
+  expiresAt: number
+}
+
+export type SimulatedOutcome = 'approved' | 'declined' | 'pending' | 'approved_after_expiry'
+
+/** Inicia o pagamento pela função PÚBLICA (a mesma que a tela usará). */
+export function startPayment(
+  t: Backend,
+  created: CreatedOperation,
+  method: 'pix' | 'card',
+  paymentMethodToken?: string,
+) {
+  return t.action(api.public.payments.startPayment, {
+    operationId: created.operationId,
+    accessToken: created.accessToken,
+    paymentMethod: method,
+    ...(paymentMethodToken !== undefined ? { paymentMethodToken } : {}),
+  })
+}
+
+/** Simulação de desenvolvimento (função interna): faz o papel do provedor via webhook assinado. */
+export function simulate(
+  t: Backend,
+  operationId: Id<'paymentOperations'>,
+  outcome: SimulatedOutcome,
+  eventId?: string,
+) {
+  return t.action(internal.dev.simulate.simulatePayment, {
+    operationId,
+    outcome,
+    ...(eventId !== undefined ? { eventId } : {}),
+  })
+}
+
+export function loadTransactions(t: Backend, operationId: Id<'paymentOperations'>) {
+  return t.run((ctx) =>
+    ctx.db
+      .query('paymentTransactions')
+      .withIndex('by_operation', (q) => q.eq('operationId', operationId))
+      .collect(),
+  )
+}
+
+export function loadAttempts(t: Backend, operationId: Id<'paymentOperations'>) {
+  return t.run((ctx) =>
+    ctx.db
+      .query('chargeAttempts')
+      .withIndex('by_operation', (q) => q.eq('operationId', operationId))
+      .collect(),
+  )
+}
+
+export function getOperationView(t: Backend, created: CreatedOperation) {
+  return t.query(api.public.payments.getOperation, {
+    operationId: created.operationId,
+    accessToken: created.accessToken,
+  })
+}
+
+/** Lê o `data` de um ConvexError lançado (ou falha se a chamada der certo). */
+export async function errorData(promise: Promise<unknown>): Promise<Record<string, unknown>> {
+  try {
+    await promise
+  } catch (error) {
+    if (error instanceof ConvexError) return error.data as Record<string, unknown>
+    throw error
+  }
+  throw new Error('Esperava um ConvexError, mas a chamada foi bem-sucedida.')
 }

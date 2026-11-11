@@ -44,6 +44,25 @@ export const REJECTED_MESSAGE =
   'A análise do seu pagamento foi concluída e a utilização das piscinas não foi liberada. ' +
   'Entre em contato com o Sindicomerciários para mais informações.'
 
+/** Rascunho. */
+export const PIX_PENDING_MESSAGE =
+  'Pix gerado. Use o código “copia e cola” ou o QR Code para pagar dentro do prazo. ' +
+  'A confirmação pode levar alguns instantes: não pague novamente.'
+
+/** Rascunho. */
+export const CARD_PENDING_MESSAGE =
+  'Pagamento por cartão em processamento. Aguarde a confirmação e não faça um novo pagamento.'
+
+/** Rascunho. Cobrança recusada: nenhum recebimento foi identificado. */
+export const CHARGE_FAILED_MESSAGE =
+  'O pagamento não foi aprovado e nenhum recebimento foi identificado. ' +
+  'Você pode tentar novamente dentro do prazo.'
+
+/** Rascunho. */
+export const CHARGE_CANCELED_MESSAGE =
+  'A cobrança foi cancelada e nenhum recebimento foi identificado. ' +
+  'Se ainda deseja utilizar as piscinas, tente novamente dentro do prazo.'
+
 export type OperationPresentationCode =
   | 'awaiting_payment'
   | 'confirmed'

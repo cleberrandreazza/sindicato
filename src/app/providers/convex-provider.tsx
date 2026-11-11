@@ -1,9 +1,6 @@
-import { ConvexProvider, ConvexReactClient } from 'convex/react'
+import { ConvexProvider } from 'convex/react'
 import type { ReactNode } from 'react'
-import { env } from '@/lib/env'
-
-// Sem URL configurada o cliente não é criado e a aplicação segue sem backend.
-const convexClient = env.convexUrl ? new ConvexReactClient(env.convexUrl) : null
+import { convexClient } from '@/lib/convex-client'
 
 export function AppConvexProvider({ children }: { children: ReactNode }) {
   if (!convexClient) return <>{children}</>

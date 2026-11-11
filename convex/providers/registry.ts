@@ -53,6 +53,14 @@ function resolveProvider<T>(
 }
 
 /**
+ * Resolve apenas o provider de pagamento. Cobranças e webhooks não dependem da configuração dos
+ * demais providers (associados, notificações).
+ */
+export function getPaymentProvider(env: ProviderEnv = process.env): PaymentProvider {
+  return resolveProvider('pagamentos', 'PAYMENT_PROVIDER', PAYMENT_FACTORIES, env)
+}
+
+/**
  * Resolve os providers a partir do ambiente do deployment Convex.
  * Seguro por padrão: sem `APP_ENV=development`, mocks são recusados e a ausência de
  * configuração gera erro em vez de cair silenciosamente em dados simulados.

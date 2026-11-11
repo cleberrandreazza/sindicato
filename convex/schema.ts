@@ -2,6 +2,7 @@ import { defineSchema, defineTable } from 'convex/server'
 import { v } from 'convex/values'
 import {
   alertStatus,
+  chargeAttemptState,
   claimState,
   eventActor,
   financialStatus,
@@ -15,6 +16,7 @@ import {
   operationalStatus,
   paymentMethod,
   paymentProviderName,
+  pixQrCode,
   providerEventOutcome,
   reviewReason,
   reviewStatus,
@@ -136,12 +138,35 @@ export default defineSchema({
     status: transactionStatus,
     /** Código copia-e-cola do Pix, para reexibir o QR Code. */
     pixCopyPasteCode: v.optional(v.string()),
+    /** QR Code do Pix (imagem demonstrativa no mock). */
+    qrCode: v.optional(pixQrCode),
+    /** Instante (UTC, ms) em que a cobrança Pix deixa de aceitar pagamento, segundo o provedor. */
+    chargeExpiresAt: v.optional(v.number()),
     failureReason: v.optional(v.string()),
     updatedAt: v.number(),
   })
     .index('by_operation', ['operationId'])
     // Necessário para resolver eventos do provedor de forma idempotente.
     .index('by_provider_transaction', ['provider', 'providerTransactionId']),
+
+  /**
+   * Tentativas de criar cobrança no provedor. A linha é gravada ANTES da chamada externa e é o
+   * ponto de exclusão entre chamadas simultâneas (ver `payments/charges.ts`). Não guarda token de
+   * cartão nem qualquer dado de pagamento.
+   */
+  chargeAttempts: defineTable({
+    operationId: v.id('paymentOperations'),
+    method: paymentMethod,
+    /** 1, 2, 3...: parte da chave de idempotência enviada ao provedor. */
+    attempt: v.number(),
+    idempotencyKey: v.string(),
+    state: chargeAttemptState,
+    /** Início (ou retomada) da chamada ao provedor, UTC ms. */
+    startedAt: v.number(),
+    transactionId: v.optional(v.id('paymentTransactions')),
+    /** Código técnico do erro do provedor (nunca texto livre nem dado pessoal). */
+    errorCode: v.optional(v.string()),
+  }).index('by_operation', ['operationId']),
 
   /**
    * Registro de TODO evento recebido do provedor (webhook), conhecido ou não. Guarda apenas
@@ -176,6 +201,30 @@ export default defineSchema({
     .index('by_provider_event', ['provider', 'eventId'])
     // Fila de alertas do painel administrativo.
     .index('by_alert_status', ['alertStatus']),
+
+  /**
+   * Prova de identificação do associado (NÃO é login nem conta). Emitida quando carteirinha + CPF
+   * conferem; vida curta. Só o hash do token é guardado. Funções públicas que recebem um
+   * `memberId` exigem o token correspondente, para que um id sozinho nunca dê acesso.
+   */
+  identificationSessions: defineTable({
+    memberId: v.id('members'),
+    tokenHash: v.string(),
+    /** Instante (UTC, ms) em que a prova deixa de valer. */
+    expiresAt: v.number(),
+  }).index('by_token_hash', ['tokenHash']),
+
+  /**
+   * Contadores de proteção contra abuso (janela fixa por chave). Linhas são apagadas por função
+   * agendada quando a janela termina. Não guardam dado pessoal além do número da carteirinha
+   * digitado em tentativas de identificação.
+   */
+  rateLimits: defineTable({
+    key: v.string(),
+    count: v.number(),
+    /** Fim da janela (UTC, ms). */
+    expiresAt: v.number(),
+  }).index('by_key', ['key']),
 
   /** Fila de análise administrativa: recebimentos que não podem ser liberados automaticamente. */
   paymentReviews: defineTable({

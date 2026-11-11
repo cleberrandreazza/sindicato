@@ -62,3 +62,23 @@ export async function reacquireClaims(
   }
   return { conflicts }
 }
+
+/**
+ * Pessoas (entre as informadas) que já têm reserva ativa na data: operação pendente, paga ou com
+ * recebimento em análise. Operação expirada sem recebimento já teve as reservas liberadas e não
+ * aparece aqui. Chaveado por `personId`, portanto vale entre titulares diferentes.
+ *
+ * Em uma QUERY isto é só informativo. A garantia de exclusividade vem de chamar esta função
+ * dentro da mesma mutation que insere as reservas (ver o comentário no topo do arquivo).
+ */
+export async function findConflicts<TPerson extends { readonly personId: string }>(
+  ctx: Pick<QueryCtx, 'db'>,
+  people: readonly TPerson[],
+  usageDate: string,
+): Promise<TPerson[]> {
+  const conflicts: TPerson[] = []
+  for (const person of people) {
+    if (await findActiveClaim(ctx, person.personId, usageDate)) conflicts.push(person)
+  }
+  return conflicts
+}

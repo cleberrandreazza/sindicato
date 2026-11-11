@@ -1,4 +1,4 @@
-import type { PaymentProviderName, TransactionStatus } from '../domain/statuses'
+import type { PaymentProviderName, PixQrCode, TransactionStatus } from '../domain/statuses'
 
 /** Campos comuns a qualquer cobrança. O valor é sempre calculado pelo backend. */
 export interface CreateChargeBase {
@@ -25,15 +25,27 @@ export interface CreateCardChargeInput extends CreateChargeBase {
 
 export interface PixCharge {
   readonly providerTransactionId: string
+  /** Pix nasce `pending`; o recebimento chega depois, por notificação do provedor. */
   readonly status: TransactionStatus
+  /** Valor cobrado, em centavos, conforme o provedor. O backend confere com a operação. */
+  readonly amountCents: number
   /** Payload "copia e cola" do Pix. */
   readonly pixCopyPasteCode: string
+  /** QR Code para exibição (imagem do provedor ou, no mock, um placeholder não escaneável). */
+  readonly qrCode: PixQrCode
   readonly expiresAt: number
 }
 
 export interface CardCharge {
   readonly providerTransactionId: string
+  /**
+   * `succeeded`/`failed` quando o provedor decide na própria criação; `pending` quando depende
+   * de confirmação posterior (ex.: 3-D Secure). Qualquer resultado entra no backend pela mesma
+   * porta de eventos (`providerEvents`), então prazo e valor continuam sendo verificados.
+   */
   readonly status: TransactionStatus
+  /** Valor cobrado, em centavos, conforme o provedor. O backend confere com a operação. */
+  readonly amountCents: number
   /** Presente quando o provedor exige confirmação no navegador (ex.: 3-D Secure). */
   readonly clientSecret: string | null
   readonly failureReason: string | null

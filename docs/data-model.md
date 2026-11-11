@@ -223,9 +223,21 @@ Ciclo de vida da reserva (`claim`):
 
 ### `paymentTransactions`
 
-Inalterada: tentativas junto ao provedor. Índices `by_operation` e
+Tentativas junto ao provedor (uma cobrança = uma linha). Índices `by_operation` e
 `by_provider_transaction [provider, providerTransactionId]` (webhook idempotente).
-`succeeded` é terminal (`canTransitionTransaction`).
+`succeeded` é terminal (`canTransitionTransaction`). Nasce sempre `pending`; o resultado imediato
+do provedor é aplicado por `ingestProviderEvent`. Novos campos opcionais: `qrCode`
+(`{ kind: 'placeholder' | 'image_url', value }`, Pix) e `chargeExpiresAt` (limite do Pix segundo o
+provedor). Nunca guarda token nem dado de cartão.
+
+### `chargeAttempts`
+
+Tentativa de **criar** uma cobrança no provedor, gravada **antes** da chamada externa. É o ponto de
+exclusão entre chamadas simultâneas e a base da idempotência. Campos: `operationId`, `method`,
+`attempt` (1, 2, 3), `idempotencyKey` (`op_<operationId>_<forma>_<n>`), `state`
+(`creating | created | error`), `startedAt`, `transactionId?` e `errorCode?` (só o código técnico).
+Índice: `by_operation`. Máximo de 3 por operação. `creating` há mais de 60 s é considerada
+interrompida e é retomada com a mesma chave. Não guarda token de cartão.
 
 ### `providerEvents`
 
@@ -273,6 +285,18 @@ máximo um comprovante por operação. Numeração `SC-AAAA-NNNNNN` (prefixo pro
 Uma linha por tentativa de envio. Novo campo `kind`: `receipt` (com `receiptId`) ou
 `payment_under_review` (sem `receiptId`). Índice: `by_operation`.
 
+### `identificationSessions`
+
+Prova de identificação emitida pela consulta cadastral. Campos: `memberId`, `tokenHash` (SHA-256
+do token aleatório de 256 bits; o token só existe na resposta), `expiresAt` (30 min). Não guarda
+CPF. Removida por função agendada ao expirar. Índice: `by_token_hash`.
+
+### `rateLimits`
+
+Contadores de janela fixa para proteção técnica contra abuso: `key` (`lookup:fail:<carteirinha>`,
+`lookup:global`, `create:<memberId>`), `count`, `expiresAt`. Não são regras de negócio. Removida
+por função agendada ao expirar. Índice: `by_key`.
+
 ## Índices
 
 | Consulta                          | Índice                                                 | Observação                              |
@@ -293,6 +317,9 @@ Uma linha por tentativa de envio. Novo campo `kind`: `receipt` (com `receiptId`)
 | Histórico de uma operação         | `operationEvents.by_operation`                         | Nova.                                   |
 | Comprovante da operação / número  | `receipts.by_operation`, `receipts.by_receipt_number`  |                                         |
 | Notificações por operação         | `notifications.by_operation`                           |                                         |
+| Tentativas de cobrança            | `chargeAttempts.by_operation`                          | Nova. Exclusão e idempotência.          |
+| Prova de identificação            | `identificationSessions.by_token_hash`                 | Nova (API pública).                     |
+| Contador de limite                | `rateLimits.by_key`                                    | Nova (API pública).                     |
 
 Não há índice por `expiresAt`: a expiração é uma função agendada por operação.
 

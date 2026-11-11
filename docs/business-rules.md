@@ -97,6 +97,73 @@ Em resumo, são **dois eixos**:
 - **Operacional**: a utilização pode ser exercida? `awaiting_payment`, `confirmed`, `expired`,
   `under_review`, `rejected`.
 
+### Estados e transições
+
+Há **três** estados que nunca se confundem. Cada um responde a uma pergunta diferente:
+
+| Estado                          | Onde                                  | Pergunta                              | Valores                                                                |
+| ------------------------------- | ------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------- |
+| **Da cobrança** (uma tentativa) | `paymentTransactions.status`          | O que o provedor diz desta tentativa? | `pending`, `succeeded`, `failed`, `canceled`, `expired`                |
+| **Financeiro** (da operação)    | `paymentOperations.financialStatus`   | O dinheiro foi recebido?              | `unpaid`, `paid`, `paid_late`                                          |
+| **Operacional** (da operação)   | `paymentOperations.operationalStatus` | A utilização pode ser exercida?       | `awaiting_payment`, `confirmed`, `expired`, `under_review`, `rejected` |
+
+Regra central: **só um recebimento (`succeeded`) validado por `decideConfirmation` move o estado
+financeiro.** Recusa, cancelamento e expiração de cobrança atualizam apenas a transação; a
+operação segue `unpaid` (e, enquanto no prazo, `awaiting_payment`). A expiração da operação
+(`awaiting_payment` → `expired`) também não é um recebimento e não toca no financeiro.
+
+Transições permitidas (código: `domain/statuses.ts`):
+
+```text
+Cobrança:     pending ──► succeeded            (terminal: nunca é rebaixada)
+              pending ──► failed | canceled | expired
+              failed | canceled | expired ──► succeeded   (dinheiro recebido não é descartado)
+
+Financeiro:   unpaid ──► paid          (no prazo, valor correto)
+              unpaid ──► paid_late     (depois do prazo)
+              paid, paid_late: terminais
+
+Operacional:  awaiting_payment ──► confirmed | expired | under_review
+              expired ──► confirmed    (recebido no prazo, notificação chegou depois)
+              expired ──► under_review (recebimento tardio ou divergente)
+              under_review ──► confirmed | rejected   (só por análise administrativa)
+              confirmed, rejected: terminais
+```
+
+Quem causa cada transição:
+
+| Causa                                                  | Cobrança                      | Financeiro  | Operacional                         |
+| ------------------------------------------------------ | ----------------------------- | ----------- | ----------------------------------- |
+| `startPayment` (Pix gerado / cartão pendente)          | cria `pending`                | —           | —                                   |
+| Cartão recusado, Pix cancelado ou expirado no provedor | `failed`/`canceled`/`expired` | **—**       | **— (continua aberta até o prazo)** |
+| Pagamento aprovado no prazo                            | `succeeded`                   | `paid`      | `confirmed`                         |
+| Pagamento aprovado depois do prazo                     | `succeeded`                   | `paid_late` | `under_review`                      |
+| Valor divergente                                       | `succeeded`                   | `unpaid`    | `under_review`                      |
+| Prazo de 15 min sem recebimento (função agendada)      | —                             | —           | `expired` (reservas liberadas)      |
+| Análise administrativa                                 | —                             | —           | `confirmed` ou `rejected`           |
+
+O **resultado imediato do provedor** na criação (ex.: cartão aprovado) é tratado como um evento
+comum (`created:<id>`, `occurredAt` = instante da resposta), pela mesma porta dos webhooks. Não há
+atalho: um cartão aprovado depois do prazo vira `paid_late` + análise, sem liberação.
+
+### Regras da criação de cobrança
+
+Validadas no servidor, antes de qualquer chamada ao provedor
+(`domain/charges.checkOperationPayable` + `payments/charges:begin`):
+
+1. A operação existe e a credencial (`accessToken`) confere (mesma resposta para inexistente/incorreta).
+2. Está **pendente**: `unpaid` + `awaiting_payment`. Paga → `operation_already_paid`; recebimento
+   tardio/em análise → `operation_under_review` (prevalece sobre "expirada", para não orientar a
+   pagar de novo); encerrada → `operation_closed`.
+3. **Não expirou**, pelo relógio e não só pelo status (a expiração agendada pode atrasar).
+4. Possui pessoas selecionadas, e a quantidade de pessoas gravadas bate com `quantity`.
+5. O valor é válido: `totalAmountCents = quantity × unitAmountCents`, inteiro e positivo. Qualquer
+   inconsistência bloqueia a cobrança (`invalid_operation_amount`): melhor recusar que cobrar errado.
+6. Não há cobrança anterior incompatível: no máximo **uma cobrança pendente por operação**;
+   outra forma de pagamento com uma pendente → `payment_method_conflict`; tentativas limitadas a 3.
+
+O valor cobrado é **sempre** o armazenado na operação; o navegador não envia valor.
+
 ## Tratamento de pagamentos e confirmações
 
 Uma notificação do provedor, já autenticada e normalizada, é avaliada pela função pura
@@ -267,10 +334,29 @@ recusa sem `APP_ENV=development`).
   nasce `pending` e a confirmação, no prazo ou atrasada, é **simulada** informando `occurredAt` ao
   chamar `processConfirmation` e entregar o resultado a `providerEvents.ingest`.
   `getPaymentStatus` deriva o resultado do id.
-- **Cartão:** apenas dois tokens (`tok_mock_approved`, `tok_mock_declined`); não há 3-D Secure.
+- **Cartão:** apenas quatro tokens fictícios (`tok_mock_approved`, `tok_mock_declined`,
+  `tok_mock_pending`, `tok_mock_unavailable`); não há 3-D Secure de verdade. No desenvolvimento, o
+  navegador escolhe o resultado pelo token (simula o SDK); com um provedor real o resultado é do
+  provedor.
+- **Pix:** o "copia e cola" e o QR são fictícios e não pagáveis; nenhum banco os reconhece.
+- **Simulação de pagamento:** só por `dev/simulate:simulatePayment` (interna, CLI/painel). Nenhum
+  pagamento acontece sozinho. O mock não tem relógio: "pagamento tardio" é simulado com
+  `approved_after_expiry` ou avançando o relógio.
+- **Cobranças órfãs:** se a action cair depois de o provedor criar a cobrança e antes de gravá-la
+  localmente, a retomada (mesma chave de idempotência) recupera a mesma cobrança; se ninguém
+  retomar, um webhook posterior dessa cobrança vira `unknown_transaction` + alerta. Não há
+  reconciliação automática (`getPaymentStatus` não é chamado por nenhuma rotina) nem expiração
+  automática de tentativas `creating` órfãs.
 - **Notificações:** nada é enviado; devolve apenas um id simulado.
 - **Cobranças desconhecidas e reenvios do provedor:** só ocorrem se forem simulados nos testes.
 - **Regras de funcionamento, antecedência e isenções:** inexistentes (ver pendências).
 - **Comprovante:** o registro e o número existem; o arquivo PDF ainda não é gerado. O prefixo
   `SC` da numeração é provisório.
-- **Identificação:** não há limitação de tentativas (rate limit) nem CAPTCHA.
+- **Identificação:** há limites técnicos (5 falhas/15 min por carteirinha, 120 consultas/min
+  global, 10 operações/15 min por titular), mas **não** limite por IP nem CAPTCHA (o Convex não
+  expõe a origem). Um atacante pode bloquear uma carteirinha por 15 min. Ver
+  [architecture.md](./architecture.md#estratégia-de-segurança-da-api).
+- **API pública:** o mock devolve sempre os mesmos dados; titular inativo é **informado** (situação
+  cadastral) e fica sem prova de identificação, em vez de erro genérico.
+- Os limites acima são salvaguardas técnicas, **não** regras de negócio do sindicato
+  (`convex/domain/limits.ts`).

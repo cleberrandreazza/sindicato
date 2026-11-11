@@ -127,6 +127,30 @@ export const transactionStatus = v.union(
 )
 export type TransactionStatus = Infer<typeof transactionStatus>
 
+/**
+ * QR Code do Pix. `placeholder`: imagem demonstrativa (data URI SVG) que NÃO é escaneável, usada
+ * pelo mock. `image_url`: imagem do provedor real.
+ */
+export const pixQrCode = v.object({
+  kind: v.union(v.literal('placeholder'), v.literal('image_url')),
+  value: v.string(),
+})
+export type PixQrCode = Infer<typeof pixQrCode>
+
+/**
+ * Tentativa de criar uma cobrança no provedor (registro ANTES da chamada externa, para que
+ * chamadas simultâneas e repetidas não criem cobranças independentes).
+ * - `creating`: a chamada ao provedor está em andamento (ou foi interrompida).
+ * - `created`: o provedor respondeu e a transação local foi gravada.
+ * - `error`: o provedor falhou; a retomada reaproveita a mesma chave de idempotência.
+ */
+export const chargeAttemptState = v.union(
+  v.literal('creating'),
+  v.literal('created'),
+  v.literal('error'),
+)
+export type ChargeAttemptState = Infer<typeof chargeAttemptState>
+
 export const notificationChannel = v.union(v.literal('email'), v.literal('whatsapp'))
 export type NotificationChannel = Infer<typeof notificationChannel>
 

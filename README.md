@@ -45,6 +45,21 @@ pnpm dev:convex   # backend Convex
 O frontend sobe sem o Convex. Na primeira execução de `pnpm dev:convex`, o CLI cria/associa um
 deployment e grava `VITE_CONVEX_URL` em `.env.local` automaticamente.
 
+### Tela de identificação do associado
+
+A rota `/` é a primeira etapa da jornada (carteirinha + CPF) e consome `public/members:lookup`.
+Para experimentá-la ponta a ponta: `pnpm dev:convex`, defina as variáveis abaixo e, em outro
+terminal, `pnpm dev`; use os dados fictícios da tabela mais adiante. Sem `VITE_CONVEX_URL` a tela
+abre, mas a consulta responde "Não foi possível consultar agora".
+
+Organização (`src/features/identification/`): `api/` (única chamada ao Convex), `lib/`
+(máscara, preenchimento e interpretação das respostas; funções puras), `hooks/` (estado da tela),
+`components/` (apresentação). O layout compartilhado das telas da jornada está em
+`src/components/layout/journey-layout.tsx`. Capturas de tela em `docs/screenshots/`
+(`<largura>-<n>-<estado>.png`). Regras de negócio continuam só no backend: o front apenas
+classifica as respostas (`identification_failed` → "não encontrado", cadastro inativo,
+`too_many_attempts`, demais falhas → "tente novamente").
+
 ### Variáveis do backend (deployment Convex)
 
 Ficam no deployment, não no `.env.local`. Para desenvolvimento local:
@@ -75,7 +90,22 @@ Cada pessoa tem um `personId` estável (`mock-person-NNNN`), distinto do id do v
 Teste Almeida** é dependente de Ana (`100001`) e de Daniela (`100003`) com o mesmo `personId`: serve
 para testar que a mesma pessoa não paga duas vezes na mesma data, mesmo por titulares diferentes.
 
-Pagamento simulado: cartão `tok_mock_approved` (aprova) e `tok_mock_declined` (recusa). Pix
+Para experimentar a API pública (`convex/public/`), consulte com carteirinha e CPF acima; o
+contrato completo está em [docs/architecture.md](docs/architecture.md#api-pública-contrato-com-o-frontend).
+Operações podem ser criadas, consultadas e **cobradas** (`startPayment`, Pix ou cartão com token
+fictício). Nenhum pagamento acontece sozinho: para "pagar" no desenvolvimento use a simulação
+interna (só com `APP_ENV=development` e provider mock):
+
+```bash
+npx convex run dev/simulate:simulatePayment '{"operationId":"<id>","outcome":"approved"}'
+# outcome: approved | declined | pending | approved_after_expiry
+```
+
+Detalhes e a lista do que depende da integração real em
+[docs/integrations.md](docs/integrations.md#webhook-e-integração-futura-stripe).
+
+Pagamento simulado: cartão `tok_mock_approved` (aprova), `tok_mock_declined` (recusa),
+`tok_mock_pending` (pendente) e `tok_mock_unavailable` (provedor fora do ar). Pix
 nasce pendente; a confirmação simulada está descrita em
 [docs/integrations.md](docs/integrations.md#mocks).
 
@@ -105,8 +135,9 @@ src/
   components/
     ui/           componentes shadcn/ui
     shared/       componentes reutilizáveis do projeto
-  features/       módulos por funcionalidade (member-identification, dependents,
-                  pool-payment, payment-status, receipts, admin)
+    layout/       estrutura das telas da jornada (JourneyLayout)
+  features/       módulos por funcionalidade: identification (pronto); previstos: dependents,
+                  pool-payment, payment-status, receipts, admin
   lib/            utilitários e configuração (cn, env)
   services/       adaptadores do frontend (chamadas ao Convex), quando necessário
   types/          tipos compartilhados
@@ -120,7 +151,8 @@ convex/
   providers/      contratos (member/payment/notification), registry e mock/
   members/        sync (pessoas, vínculos e papéis a partir do MemberProvider)
   notifications/  funções Convex (próximas etapas)
-tests/            domain/ (funções puras) e convex/ (mutations com convex-test)
+tests/            domain/ (funções puras), convex/ (mutations com convex-test) e web/
+                  (interface: funções puras e componentes com Testing Library + jsdom)
 docs/             regras de negócio, arquitetura, modelo de dados e integrações
 ```
 
