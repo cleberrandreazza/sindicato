@@ -342,3 +342,6 @@ A API pública chega até a criação da **cobrança** (`startPayment`). Confirm
   `NOTIFICATION_PROVIDER` e segredos no deployment. Até lá o mock **não** envia e-mail real.
 - **WhatsApp:** consentimento, templates aprovados e fornecedor definidos pelo sindicato; conectar
   sem alterar regras financeiras.
+
+Checklist executivo e pendências de integração: [presentation-readiness.md](./presentation-readiness.md).
+Auditoria técnica: [homologation-report.md](./homologation-report.md).

@@ -17,7 +17,6 @@ pessoas e a data de utilização e paga via Pix ou cartão em até 15 minutos.
 | 4. Resumo             | Implementada (`/resumo`); cria a operação no backend com idempotência              |
 | 5. Pagamento          | Implementada (`/pagamento`); Pix/cartão **simulados** (mock); Stripe real pendente |
 | 6. Comprovante        | Implementada (`/comprovante`); PDF + e-mail **mock**; WhatsApp preparado           |
-| 6. Comprovante        | Não implementada (backend gera o comprovante; falta a tela e o envio real)         |
 
 ## Stack
 
@@ -29,6 +28,8 @@ React · TypeScript (strict) · Vite · TanStack Router · Tailwind CSS v4 · sh
 - [Arquitetura](docs/architecture.md)
 - [Modelo de dados](docs/data-model.md)
 - [Integrações externas](docs/integrations.md)
+- [Relatório de homologação](docs/homologation-report.md) (auditoria da 1ª entrega)
+- [Prontidão para apresentação](docs/presentation-readiness.md) (diretoria / sindicato)
 
 ## Requisitos
 

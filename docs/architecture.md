@@ -675,8 +675,10 @@ exercitadas com a validação injetada por props; nenhum teste chama um backend 
 | Registro da transação       | Garantir que toda cobrança criada no provedor tenha linha local (webhook de cobrança desconhecida só alerta) |
 | `NotificationProvider` real | Provedor de e-mail e WhatsApp Business (templates; WhatsApp ainda `not_configured`)                          |
 | Layout oficial do PDF       | Dados institucionais definitivos do sindicato (CNPJ/endereço quando fornecidos)                              |
-| Painel administrativo       | Autenticação; consome `paymentReviews.by_status` e `providerEvents.by_alert_status`                          |
-| Regras de uso               | Dias, horários, antecedência, isenções, faixas etárias                                                       |
-| Proteção contra abuso       | CAPTCHA/Turnstile e/ou proxy com a origem (limites por IP); os limites atuais são só por carteirinha/global  |
+
+Homologação da 1ª entrega e riscos residuais: [homologation-report.md](./homologation-report.md).
+| Painel administrativo | Autenticação; consome `paymentReviews.by_status` e `providerEvents.by_alert_status` |
+| Regras de uso | Dias, horários, antecedência, isenções, faixas etárias |
+| Proteção contra abuso | CAPTCHA/Turnstile e/ou proxy com a origem (limites por IP); os limites atuais são só por carteirinha/global |
 
 Detalhes dos contratos em [integrations.md](./integrations.md).

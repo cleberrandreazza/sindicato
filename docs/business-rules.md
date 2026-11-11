@@ -261,6 +261,9 @@ Confirmação financeira só pelo fluxo autorizado do backend (`providerEvents` 
 
 **Pendente (checkout):** Stripe real, webhook HTTP público, textos finais do sindicato.
 
+Auditoria da 1ª entrega: [homologation-report.md](./homologation-report.md). Apresentação à
+diretoria: [presentation-readiness.md](./presentation-readiness.md).
+
 ## Comprovante definitivo e notificações
 
 **Critérios para emitir o comprovante definitivo (PDF):** cobrança validada pelo mecanismo
