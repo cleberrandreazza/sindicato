@@ -62,6 +62,10 @@ export const PUBLIC_ERROR_MESSAGES = {
   invalid_payment_method:
     'Forma de pagamento inválida. Para cartão, use o token gerado pelo provedor; Pix não usa token.',
   invalid_payment_token: 'Não foi possível processar os dados do cartão. Revise e tente novamente.',
+  // Demonstração pública (só APP_ENV=demonstration + PaymentProvider mock)
+  demo_simulation_disabled: 'A simulação de pagamento não está disponível neste ambiente.',
+  demo_payment_required:
+    'Inicie o pagamento (Pix ou cartão demonstrativo) antes de simular a confirmação.',
   // Comprovante / notificações
   receipt_not_available: 'O comprovante definitivo ainda não está disponível para esta operação.',
   receipt_file_not_ready:

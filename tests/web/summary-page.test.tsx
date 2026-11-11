@@ -75,6 +75,7 @@ const view = (patch: Partial<OperationView> = {}): OperationView => ({
   notifications: [],
   paidAt: null,
   payment: null,
+  demoSimulationAllowed: false,
   ...patch,
 })
 

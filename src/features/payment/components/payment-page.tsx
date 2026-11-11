@@ -4,11 +4,12 @@ import { Button } from '@/components/ui/button'
 import { formatBRL, peopleLabel } from '@/features/selection/lib/summary'
 import type { CreatedOperation } from '@/features/summary/lib/created-operation'
 import { formatUsageDate, formatUsageDateBR } from '@/features/usage-date/lib/usage-date'
-import type { GetOperationFn, StartPaymentFn } from '../api/start-payment'
+import type { GetOperationFn, SimulateDemoPaymentFn, StartPaymentFn } from '../api/start-payment'
 import { usePayment } from '../hooks/use-payment'
 import type { MockCardScenario } from '../lib/mock-card-tokens'
 import { CardPanel } from './card-panel'
 import { DeadlineBanner } from './deadline-banner'
+import { DemoSimulationPanel } from './demo-simulation-panel'
 import { MethodPicker } from './method-picker'
 import { PaymentStatus } from './payment-status'
 import { PixPanel } from './pix-panel'
@@ -23,6 +24,7 @@ interface PaymentPageProps {
   onOutcomeReady?: () => void | Promise<void>
   start?: StartPaymentFn
   getState?: GetOperationFn
+  simulateDemo?: SimulateDemoPaymentFn
   nowMs?: () => number
   pollIntervalMs?: number
   /** Substitui a cópia do Pix (testes). */
@@ -37,6 +39,7 @@ export function PaymentPage({
   onOutcomeReady,
   start,
   getState,
+  simulateDemo,
   nowMs,
   pollIntervalMs,
   copyText,
@@ -48,13 +51,25 @@ export function PaymentPage({
     initialExpiresAt: operation.expiresAt,
     start,
     getState,
+    simulateDemo,
     pollIntervalMs,
     onGone: onSessionExpired ?? onFinish,
   })
 
   const startingMethod = payment.state.status === 'starting' ? payment.state.method : null
-  const busy = payment.state.status === 'starting' || payment.state.status === 'refreshing'
-  const active = payment.state.status === 'active' ? payment.state.active : null
+  const busy =
+    payment.state.status === 'starting' ||
+    payment.state.status === 'refreshing' ||
+    payment.state.status === 'simulating'
+  const active =
+    payment.state.status === 'active' || payment.state.status === 'simulating'
+      ? payment.state.active
+      : null
+  const showDemoControls =
+    payment.demoSimulationAllowed &&
+    active !== null &&
+    active.payment.status === 'pending' &&
+    active.operationalStatus === 'awaiting_payment'
 
   useEffect(() => {
     if (!onOutcomeReady) return
@@ -153,6 +168,14 @@ export function PaymentPage({
             refreshing={payment.state.status === 'refreshing'}
             onRefresh={() => void payment.refresh()}
             copyText={copyText}
+          />
+        ) : null}
+
+        {showDemoControls ? (
+          <DemoSimulationPanel
+            busy={payment.state.status === 'simulating'}
+            errorMessage={payment.demoError}
+            onSimulate={(outcome) => void payment.simulate(outcome)}
           />
         ) : null}
 

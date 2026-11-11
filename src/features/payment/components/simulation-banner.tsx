@@ -13,6 +13,10 @@ export function SimulationBanner() {
           gerado, nenhum cartão é cobrado e nenhum dinheiro é movimentado. A integração com o
           provedor real (Stripe) ainda não está ativa.
         </p>
+        <p>
+          Em demonstração pública, a confirmação só ocorre pelos controles autorizados pelo servidor
+          — o navegador nunca envia um status financeiro.
+        </p>
       </AlertDescription>
     </Alert>
   )

@@ -30,20 +30,23 @@ Obrigatório neste ambiente:
 - Nenhum pagamento real; Stripe/WhatsApp/e-mail reais **desligados**.
 - Segredos (`CPF_HASH_SECRET`, `OPERATION_TOKEN_SECRET`) **somente** no Convex Dashboard / CLI —
   nunca em `VITE_*`, nunca versionados.
-- Confirmação financeira continua fechada: a API pública não confirma pagamento; `simulatePayment`
-  é `internalAction` e exige `APP_ENV=development|demonstration` + `PAYMENT_PROVIDER=mock`.
+- Confirmação financeira na **produção** continua fechada. Em `APP_ENV=demonstration` + mock,
+  `public/payments:simulateDemoPayment` exige `operationId` + `accessToken`, outcome simbólico
+  (`approved`/`declined`) e reusa a porta do webhook mock — **nunca** aceita `payment_status=paid`
+  do navegador. Em qualquer outro `APP_ENV` responde `demo_simulation_disabled`. A CLI
+  `dev/simulate:simulatePayment` permanece interna.
 
 ### Limitação importante (checkout simulado hospedado)
 
 Os mocks só são permitidos com `APP_ENV=development` ou `APP_ENV=demonstration`. Em um URL
-público na Vercel, isso significa:
+público na Vercel com deployment de demonstração:
 
-- Qualquer pessoa com a URL pode **iniciar** cobranças simuladas (Pix/cartão mock) contra o
-  Convex de demonstração.
-- Ninguém confirma pagamento pelo navegador; aprovação Pix na demo exige CLI/Dashboard com
-  permissão no deployment (`npx convex run dev/simulate:simulatePayment …`).
-- Cartão mock pode “aprovar” na hora com tokens fictícios (`tok_mock_approved` etc.) — isso é
-  intencional para a demo e **não** movimenta dinheiro.
+- Quem tem a URL e o `accessToken` da **própria** operação pode iniciar cobranças simuladas e
+  usar “Simular aprovado/recusado” (autorizados no backend).
+- Não há como aprovar operação alheia sem o token dela.
+- Cartão mock também pode “aprovar” com tokens fictícios — **não** movimenta dinheiro.
+- Produção (`APP_ENV` ≠ `demonstration`) não exibe esses controles (`demoSimulationAllowed` vem
+  do servidor).
 
 Se a diretoria exigir URL restrita: use **Vercel Deployment Protection** / senha de preview
 (recurso do plano Vercel), VPN ou link temporário. **Não** implemente autenticação só no

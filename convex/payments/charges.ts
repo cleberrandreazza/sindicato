@@ -2,8 +2,14 @@ import { v } from 'convex/values'
 import type { Doc, Id } from '../_generated/dataModel'
 import { internalMutation, internalQuery } from '../_generated/server'
 import { chargeIdempotencyKey, checkOperationPayable, planCharge } from '../domain/charges'
-import { CHARGE_ATTEMPT_STALE_AFTER_MS, MAX_CHARGE_ATTEMPTS_PER_OPERATION } from '../domain/limits'
+import {
+  CHARGE_ATTEMPT_STALE_AFTER_MS,
+  DEMO_SIMULATION_MAX_PER_OPERATION,
+  DEMO_SIMULATION_WINDOW_MS,
+  MAX_CHARGE_ATTEMPTS_PER_OPERATION,
+} from '../domain/limits'
 import { publicError } from '../domain/publicErrors'
+import { readRateLimit, recordRateLimitHit } from '../security/rateLimit'
 import {
   paymentMethod,
   paymentProviderName,
@@ -247,8 +253,8 @@ export interface ChargeSnapshot {
 }
 
 /**
- * Cobrança alvo de uma simulação de desenvolvimento: a pendente mais recente da operação ou,
- * não havendo, a mais recente. Interna: usada só por `dev/simulate`.
+ * Cobrança alvo de uma simulação: a pendente mais recente da operação ou, não havendo, a mais
+ * recente. Interna: usada por `dev/simulate` e pela autorização da simulação pública de demo.
  */
 export const latestCharge = internalQuery({
   args: { operationId: v.id('paymentOperations') },
@@ -271,5 +277,41 @@ export const latestCharge = internalQuery({
       amountCents: target.amountCents,
       operationExpiresAt: operation.expiresAt,
     }
+  },
+})
+
+/**
+ * Porta de autorização da simulação pública de demonstração.
+ * Valida `accessToken` (já hasheado), exige cobrança existente e aplica rate limit por operação.
+ * Não altera estado financeiro — só autoriza a action a seguir pelo processador de webhook.
+ */
+export const authorizeDemoSimulation = internalMutation({
+  args: {
+    operationId: v.id('paymentOperations'),
+    accessTokenHash: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ operationId: Id<'paymentOperations'> }> => {
+    const operation = await ctx.db.get(args.operationId)
+    if (!operation || operation.accessTokenHash !== args.accessTokenHash) {
+      throw publicError('operation_not_found')
+    }
+
+    const now = Date.now()
+    const rateKey = `demo_sim:${operation._id}`
+    const current = await readRateLimit(ctx, rateKey, now)
+    if (current.count >= DEMO_SIMULATION_MAX_PER_OPERATION) {
+      throw publicError('too_many_requests')
+    }
+
+    const transactions = await ctx.db
+      .query('paymentTransactions')
+      .withIndex('by_operation', (q) => q.eq('operationId', operation._id))
+      .collect()
+    if (transactions.length === 0) {
+      throw publicError('demo_payment_required')
+    }
+
+    await recordRateLimitHit(ctx, rateKey, DEMO_SIMULATION_WINDOW_MS, now)
+    return { operationId: operation._id }
   },
 })

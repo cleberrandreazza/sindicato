@@ -63,14 +63,14 @@ flowchart LR
   PP -. webhook .-> PUB
 ```
 
-| Camada                | Local                                 | Responsabilidade                                                                                                                                                    |
-| --------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Interface             | `src/`                                | Exibir dados e coletar entradas. Não calcula valores nem decide elegibilidade.                                                                                      |
-| API pública           | `convex/public/`                      | **Única** superfície alcançável pelo navegador (6 funções). Valida argumentos e identificação; não decide. Ver [API pública](#api-pública-contrato-com-o-frontend). |
-| Mutations internas    | `convex/payments/`, `convex/members/` | Consistência e regras que exigem transação: criar operação, expirar, aplicar confirmação, concluir análise.                                                         |
-| Domínio               | `convex/domain/`                      | Funções puras e testáveis: decisão de confirmação, seleção, política de uso, preço, estados, mensagens, CPF.                                                        |
-| Contratos e providers | `convex/providers/`                   | Interfaces, mocks e `registry.ts`.                                                                                                                                  |
-| Dados                 | `convex/schema.ts`                    | Ver [data-model.md](./data-model.md).                                                                                                                               |
+| Camada                | Local                                 | Responsabilidade                                                                                                                                                                 |
+| --------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Interface             | `src/`                                | Exibir dados e coletar entradas. Não calcula valores nem decide elegibilidade.                                                                                                   |
+| API pública           | `convex/public/`                      | **Única** superfície alcançável pelo navegador (lista fechada em teste). Valida argumentos e identificação; não decide. Ver [API pública](#api-pública-contrato-com-o-frontend). |
+| Mutations internas    | `convex/payments/`, `convex/members/` | Consistência e regras que exigem transação: criar operação, expirar, aplicar confirmação, concluir análise.                                                                      |
+| Domínio               | `convex/domain/`                      | Funções puras e testáveis: decisão de confirmação, seleção, política de uso, preço, estados, mensagens, CPF.                                                                     |
+| Contratos e providers | `convex/providers/`                   | Interfaces, mocks e `registry.ts`.                                                                                                                                               |
+| Dados                 | `convex/schema.ts`                    | Ver [data-model.md](./data-model.md).                                                                                                                                            |
 
 **Funções internas por padrão.** Fora de `convex/public/`, tudo é `internal*`: não é alcançável
 pelo navegador. As funções públicas são finas: validam a prova de identificação e delegam à
@@ -98,9 +98,11 @@ convex/
   public/             ÚNICA superfície pública (guardada por teste)
     members.ts        lookup (action), validateSelection (query)
     payments.ts       checkDuplicates, createOperation, getOperation, startPayment,
-                      getReceiptDownloadUrl, requestReceiptEmail
+                      getReceiptDownloadUrl, requestReceiptEmail,
+                      simulateDemoPayment (só APP_ENV=demonstration + mock + accessToken)
   dev/
-    simulate.ts       (interna, só APP_ENV=development|demonstration + mock) simula o provedor via webhook assinado
+    simulate.ts       (interna, APP_ENV=development|demonstration + mock) CLI/painel
+    mockSimulation.ts núcleo compartilhado (notificação assinada → processProviderNotification)
   security/
     rateLimit.ts      contadores de janela fixa e purga agendada
   members/
@@ -234,9 +236,11 @@ orientam a correção sem criar operação. Sessão expirada volta à identifica
 
 **Etapa 5 (`/pagamento`): checkout Pix/cartão (mock).** Chama `startPayment` e consulta
 `getOperation` (polling enquanto pendente). Contador visual usa o `expiresAt` da operação (não
-reinicia ao trocar de método). Pix: QR/código demonstrativos; confirmação só via
-`dev/simulate:simulatePayment` (interna). Cartão: tokens `tok_mock_*`, sem dados reais. Nenhum
-endpoint público confirma pagamento. Stripe real: ver integrations.md.
+reinicia ao trocar de método). Pix: QR/código demonstrativos. Em `APP_ENV=demonstration`,
+`getOperation` devolve `demoSimulationAllowed` e a UI oferece botões que chamam
+`simulateDemoPayment` (accessToken + outcome simbólico; nunca status financeiro). Em
+development, confirmação via CLI `dev/simulate:simulatePayment`. Cartão: tokens `tok_mock_*`.
+Stripe real: ver integrations.md.
 
 **Etapa 6 (`/comprovante`): comprovante e notificações.** Sucesso após `confirmed` (PDF + e-mail
 mock); tela de análise para `under_review` / pagamento tardio (sem PDF definitivo). WhatsApp
@@ -363,17 +367,21 @@ concorrência; os testes automatizados a simulam suspendendo a primeira chamada 
 
 ### 4. Confirmação
 
-Hoje o único gatilho é a **simulação de desenvolvimento** (`dev/simulate:simulatePayment`, função
-interna), que monta uma notificação assinada e a entrega a `processProviderNotification`: o mesmo
-processador que a futura rota HTTP da Stripe usará. Não existe rota pública de confirmação.
+Porta única: notificação assinada → `processProviderNotification` → `providerEvents.ingest`
+(mesma base da futura rota HTTP Stripe). Gatilhos atuais:
+
+- **CLI/painel:** `dev/simulate:simulatePayment` (`internalAction`; `APP_ENV=development|demonstration` + mock).
+- **Demonstração pública:** `public/payments:simulateDemoPayment` (só `APP_ENV=demonstration` +
+  mock + `accessToken` da operação; outcomes `approved`/`declined`). O cliente **não** envia
+  `financialStatus`/`payment_status`.
 
 ```mermaid
 sequenceDiagram
-    participant P as Provedor
-    participant H as HTTP action (futura) / dev.simulate
+    participant P as Provedor / demo UI
+    participant H as HTTP futura / simulate / simulateDemoPayment
     participant PP as PaymentProvider
   participant I as providerEvents.ingest
-  P->>H: POST webhook (corpo bruto + assinatura)
+  P->>H: webhook bruto + assinatura (ou outcome simbólico na demo)
   H->>PP: processConfirmation
   PP-->>H: PaymentConfirmation (ou invalid_signature)
   H->>I: provider, eventId, transação, status, valor, occurredAt
@@ -550,30 +558,49 @@ do provedor, motivo interno da análise.
 - Não devolve: id do provedor, chave de idempotência, hashes, `memberId`.
 
 `getOperation` também devolve `payment: PaymentView | null` (a cobrança mais recente), para
-reexibir o Pix depois de recarregar a página.
+reexibir o Pix depois de recarregar a página, e `demoSimulationAllowed: boolean` (só `true` com
+`APP_ENV=demonstration` + PaymentProvider mock).
+
+### `public/payments:simulateDemoPayment` (action): simulação **só** em demonstração
+
+|                |                                                                                                                        |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Argumentos** | `{ operationId, accessToken, outcome: 'approved' \| 'declined' }`. **Nada mais** (sem status financeiro).              |
+| **Retorno**    | `{ outcome, operation: OperationView, notification: { status, duplicate?, outcome? } }`                                |
+| **Erros**      | `demo_simulation_disabled`, `operation_not_found`, `demo_payment_required`, `too_many_requests`, `service_unavailable` |
+
+- Exige `APP_ENV=demonstration` **e** PaymentProvider `mock` (checagem no servidor; o navegador
+  não “liga” o modo).
+- Valida `accessToken` (mesmo padrão de `getOperation`); token alheio → `operation_not_found`.
+- Exige cobrança já criada (`startPayment`); senão `demo_payment_required`.
+- Rate limit: 20 / 15 min por operação.
+- Entrega notificação assinada do mock a `processProviderNotification` (mesma porta do webhook).
+- Em `development`/`production` → `demo_simulation_disabled`. Controles na UI só se
+  `demoSimulationAllowed`.
 
 ### O que NÃO existe no público
 
-Confirmar pagamento, alterar estados, concluir análise, aplicar eventos do provedor, simular
-pagamentos, listar alertas e rotas HTTP/webhook (o teste de superfície proíbe `http.ts`). A
-confirmação só acontece por notificações autenticadas do provedor, fora de `convex/public/`.
+Alterar estados financeiros com campos arbitrários do cliente, concluir análise administrativa,
+aplicar eventos do provedor crus, listar alertas e rotas HTTP/webhook (o teste de superfície
+proíbe `http.ts`). A única action pública que dispara confirmação é `simulateDemoPayment`, e
+apenas no caminho mock autenticado por `accessToken` em demonstration.
 
 ### Estratégia de segurança da API
 
-| Risco                                          | Medida                                                                                                                                                       |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Usar `memberId` alheio                         | Prova obrigatória e verificada contra o titular; falha idêntica para qualquer causa (`session_invalid`).                                                     |
-| Selecionar pessoas de outra família/convidados | Só `linkId`, lido do banco **entre os vínculos deste titular**; texto livre e ids de outras tabelas são rejeitados.                                          |
-| Manipular valores ou estados                   | Validadores estritos recusam campos extras; valores calculados no servidor; nenhuma função pública escreve estado de pagamento.                              |
-| Enumerar carteirinhas/CPFs                     | Mesma resposta para "não existe" e "CPF diverge"; formato validado localmente; limites por carteirinha e globais.                                            |
-| Descobrir operação alheia                      | Credencial própria por operação; mesma resposta para inexistente e incorreta.                                                                                |
-| Vazar dados                                    | Respostas montadas campo a campo (sem `...doc`); CPF só mascarado; sem contato, `personId` nem hashes. Testes serializam e procuram esses valores.           |
-| Abuso                                          | `rateLimits`: 5 falhas/15 min por carteirinha; 120 consultas/min global; 10 operações/15 min por titular. Linhas expiradas são purgadas por função agendada. |
-| Detalhes de erro                               | Falha de configuração/provedor vira `service_unavailable`; detalhe só no log, sem CPF nem carteirinha.                                                       |
-| Confirmar pagamento pelo navegador             | Não existe função pública para isso; só a porta única de eventos (`internal`), que exige notificação autenticada pelo provider.                              |
-| Simulação em produção                          | `dev/simulate` é `internal` **e** recusa rodar sem `APP_ENV=development` ou com provider ≠ mock (`simulation_disabled`).                                     |
-| Dados de cartão                                | Só o token do SDK trafega; não é gravado, devolvido nem logado.                                                                                              |
-| Cobrança duplicada                             | Tentativa registrada antes da chamada externa + chave de idempotência estável + uma cobrança em aberto por operação.                                         |
+| Risco                                          | Medida                                                                                                                                                   |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Usar `memberId` alheio                         | Prova obrigatória e verificada contra o titular; falha idêntica para qualquer causa (`session_invalid`).                                                 |
+| Selecionar pessoas de outra família/convidados | Só `linkId`, lido do banco **entre os vínculos deste titular**; texto livre e ids de outras tabelas são rejeitados.                                      |
+| Manipular valores ou estados                   | Validadores estritos recusam campos extras; valores calculados no servidor; nenhuma função pública aceita `financialStatus`/`payment_status` do cliente. |
+| Enumerar carteirinhas/CPFs                     | Mesma resposta para "não existe" e "CPF diverge"; formato validado localmente; limites por carteirinha e globais.                                        |
+| Descobrir operação alheia                      | Credencial própria por operação; mesma resposta para inexistente e incorreta.                                                                            |
+| Vazar dados                                    | Respostas montadas campo a campo (sem `...doc`); CPF só mascarado; sem contato, `personId` nem hashes. Testes serializam e procuram esses valores.       |
+| Abuso                                          | `rateLimits`: 5 falhas/15 min por carteirinha; 120 consultas/min global; 10 operações/15 min por titular; 20 simulações demo/15 min por operação.        |
+| Detalhes de erro                               | Falha de configuração/provedor vira `service_unavailable`; detalhe só no log, sem CPF nem carteirinha.                                                   |
+| Confirmar pagamento pelo navegador             | Só via porta do provedor. Demo pública: outcome simbólico + mock assinado + `accessToken`; produção recusa (`demo_simulation_disabled`).                 |
+| Simulação em produção                          | `dev/simulate` é `internal` e exige mocks permitidos; `simulateDemoPayment` exige estritamente `APP_ENV=demonstration` + mock.                           |
+| Dados de cartão                                | Só o token do SDK trafega; não é gravado, devolvido nem logado.                                                                                          |
+| Cobrança duplicada                             | Tentativa registrada antes da chamada externa + chave de idempotência estável + uma cobrança em aberto por operação.                                     |
 
 **Limitações da proteção na v1.** Funções públicas do Convex **não recebem o IP do cliente**,
 então não há limite por origem. Consequências: (1) um atacante pode **bloquear temporariamente

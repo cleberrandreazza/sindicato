@@ -5,8 +5,11 @@ import type { PaymentView } from '../../../../convex/payments/chargeView'
 import type { OperationView } from '../../../../convex/public/payments'
 import {
   getOperation,
+  simulateDemoPayment,
   startPayment,
+  type DemoSimulationOutcome,
   type GetOperationFn,
+  type SimulateDemoPaymentFn,
   type StartPaymentFn,
 } from '../api/start-payment'
 import {
@@ -16,6 +19,7 @@ import {
   interpretStartError,
   interpretStartResult,
 } from '../lib/payment-outcome'
+import { messageOr, readPublicError } from '@/lib/public-error'
 
 export type ActivePayment = {
   method: PaymentMethod
@@ -31,6 +35,7 @@ export type PaymentUiState =
   | { status: 'starting'; method: PaymentMethod }
   | { status: 'active'; active: ActivePayment }
   | { status: 'refreshing'; active: ActivePayment | null }
+  | { status: 'simulating'; active: ActivePayment; outcome: DemoSimulationOutcome }
   | { status: 'closed'; message: string; code: string }
   | { status: 'rejected'; message: string; code: string }
   | { status: 'unavailable' }
@@ -42,6 +47,7 @@ interface UsePaymentOptions {
   initialExpiresAt: number
   start?: StartPaymentFn
   getState?: GetOperationFn
+  simulateDemo?: SimulateDemoPaymentFn
   pollIntervalMs?: number
   onGone?: () => void | Promise<void>
 }
@@ -67,7 +73,7 @@ function toActive(
 
 /**
  * Checkout: cria/reutiliza cobrança via `startPayment` e consulta o estado oficial via
- * `getOperation`. Nunca confirma pagamento no navegador.
+ * `getOperation`. Em demonstração, `simulateDemo` dispara a confirmação mock autorizada.
  */
 export function usePayment({
   operationId,
@@ -75,11 +81,14 @@ export function usePayment({
   initialExpiresAt,
   start = startPayment,
   getState = getOperation,
+  simulateDemo = simulateDemoPayment,
   pollIntervalMs = 4_000,
   onGone,
 }: UsePaymentOptions) {
   const [state, setState] = useState<PaymentUiState>({ status: 'idle' })
   const [expiresAt, setExpiresAt] = useState(initialExpiresAt)
+  const [demoSimulationAllowed, setDemoSimulationAllowed] = useState(false)
+  const [demoError, setDemoError] = useState<string | null>(null)
   const inFlight = useRef(false)
   const mounted = useRef(true)
   const activeRef = useRef<ActivePayment | null>(null)
@@ -93,7 +102,7 @@ export function usePayment({
 
   const show = useCallback((next: PaymentUiState) => {
     if (!mounted.current) return
-    if (next.status === 'active') activeRef.current = next.active
+    if (next.status === 'active' || next.status === 'simulating') activeRef.current = next.active
     if (next.status === 'idle' || next.status === 'closed' || next.status === 'gone') {
       activeRef.current = null
     }
@@ -104,6 +113,25 @@ export function usePayment({
     show({ status: 'gone' })
     await onGone?.()
   }, [onGone, show])
+
+  const applyView = useCallback(
+    (view: OperationView, reused = false) => {
+      setExpiresAt(view.expiresAt)
+      setDemoSimulationAllowed(view.demoSimulationAllowed)
+      if (view.payment) {
+        show({ status: 'active', active: toActive(view.payment, view, reused) })
+      } else if (!canAttemptPayment(view)) {
+        show({
+          status: 'closed',
+          code: view.presentation.code,
+          message: view.presentation.message,
+        })
+      } else {
+        show({ status: 'idle' })
+      }
+    },
+    [show],
+  )
 
   const refresh = useCallback(async () => {
     if (inFlight.current) return
@@ -127,24 +155,11 @@ export function usePayment({
         return
       }
       if (outcome.kind !== 'snapshot') return
-
-      const view = outcome.view
-      setExpiresAt(view.expiresAt)
-      if (view.payment) {
-        show({ status: 'active', active: toActive(view.payment, view, false) })
-      } else if (!canAttemptPayment(view)) {
-        show({
-          status: 'closed',
-          code: view.presentation.code,
-          message: view.presentation.message,
-        })
-      } else {
-        show({ status: 'idle' })
-      }
+      applyView(outcome.view)
     } finally {
       inFlight.current = false
     }
-  }, [accessToken, applyGone, getState, operationId, show])
+  }, [accessToken, applyGone, applyView, getState, operationId, show])
 
   const begin = useCallback(
     async (method: PaymentMethod, paymentMethodToken?: string) => {
@@ -173,6 +188,8 @@ export function usePayment({
             try {
               const view = await getState({ operationId, accessToken })
               setExpiresAt(view.expiresAt)
+              setDemoSimulationAllowed(view.demoSimulationAllowed)
+              // Só substitui o resultado do startPayment se o snapshot já trouxer a cobrança.
               if (view.payment) {
                 show({ status: 'active', active: toActive(view.payment, view, reused) })
               }
@@ -203,31 +220,67 @@ export function usePayment({
     [accessToken, applyGone, getState, operationId, show, start],
   )
 
+  const simulate = useCallback(
+    async (outcome: DemoSimulationOutcome) => {
+      const active = activeRef.current
+      if (!active || inFlight.current) return
+      inFlight.current = true
+      setDemoError(null)
+      show({ status: 'simulating', active, outcome })
+      try {
+        const result = await simulateDemo({ operationId, accessToken, outcome })
+        applyView(result.operation)
+      } catch (error) {
+        const publicError = readPublicError(error)
+        if (publicError?.code === 'operation_not_found') {
+          await applyGone()
+          return
+        }
+        setDemoError(
+          messageOr(
+            publicError ?? { code: 'unavailable' },
+            'Não foi possível simular o pagamento. Tente novamente.',
+          ),
+        )
+        show({ status: 'active', active })
+      } finally {
+        inFlight.current = false
+      }
+    },
+    [accessToken, applyGone, applyView, operationId, show, simulateDemo],
+  )
+
   useEffect(() => {
     void refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [operationId, accessToken])
 
   const pending =
-    state.status === 'active' &&
+    (state.status === 'active' || state.status === 'simulating') &&
     state.active.payment.status === 'pending' &&
     state.active.operationalStatus === 'awaiting_payment'
 
   useEffect(() => {
-    if (!pending) return
+    if (!pending || state.status === 'simulating') return
     const id = window.setInterval(() => {
       void refresh()
     }, pollIntervalMs)
     return () => window.clearInterval(id)
-  }, [pending, pollIntervalMs, refresh])
+  }, [pending, pollIntervalMs, refresh, state.status])
 
   return {
     state,
     expiresAt,
+    demoSimulationAllowed,
+    demoError,
     begin,
     refresh,
+    simulate,
     resetToIdle: () => {
-      if (!inFlight.current) show({ status: 'idle' })
+      if (!inFlight.current) {
+        setDemoError(null)
+        show({ status: 'idle' })
+      }
     },
   }
 }

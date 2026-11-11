@@ -53,25 +53,30 @@ describe('superfície pública do backend', () => {
       'public/payments:getOperation (query)',
       'public/payments:getReceiptDownloadUrl (action)',
       'public/payments:requestReceiptEmail (action)',
+      'public/payments:simulateDemoPayment (action)',
       'public/payments:startPayment (action)',
     ])
   })
 
-  it('não há função de simulação nem de confirmação fora de internal*', () => {
-    // Simulação (`convex/dev`), webhook (`webhookProcessor`) e confirmação (`providerEvents`)
-    // existem, mas só como funções internas.
+  it('simulação CLI e confirmação financeira permanecem internal*; demo pública é gated', () => {
     const internalOnly = [
       ['dev/simulate.ts', /export const simulatePayment = internalAction\(/],
       ['payments/webhookProcessor.ts', /export const processNotification = internalAction\(/],
       ['payments/providerEvents.ts', /export const ingest = internalMutation\(/],
       ['payments/charges.ts', /export const begin = internalMutation\(/],
       ['payments/charges.ts', /export const complete = internalMutation\(/],
+      ['payments/charges.ts', /export const authorizeDemoSimulation = internalMutation\(/],
     ] as const
     for (const [file, pattern] of internalOnly) {
       const entry = files.find(([path]) => path.endsWith(`/convex/${file}`))
       expect(entry, file).toBeDefined()
       expect(entry?.[1] ?? '', file).toMatch(pattern)
     }
+    const demo = files.find(([path]) => path.endsWith('/convex/public/payments.ts'))?.[1] ?? ''
+    expect(demo).toMatch(/export const simulateDemoPayment = action\(/)
+    expect(demo).toMatch(/isDemonstrationEnv/)
+    expect(demo).not.toMatch(/financialStatus:\s*args\./)
+    expect(demo).toMatch(/outcome: v\.union\(v\.literal\('approved'\), v\.literal\('declined'\)\)/)
   })
 
   it('o código de simulação só roda com APP_ENV mock-allowed e provider mock', () => {

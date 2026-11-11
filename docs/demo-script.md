@@ -62,6 +62,8 @@ Não usar dados reais de associados.
 **Alternativa Pix:** gerar Pix simulado; em outro terminal (só desenvolvimento):
 
 ```bash
+# Em APP_ENV=demonstration: use os botões “Simular aprovado/recusado” na própria tela.
+# Em development (CLI):
 npx convex run dev/simulate:simulatePayment '{"operationId":"<id>","outcome":"approved"}'
 ```
 

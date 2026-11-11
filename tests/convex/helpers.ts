@@ -345,6 +345,20 @@ export function simulate(
   })
 }
 
+/** Simulação pública de demonstração (exige APP_ENV=demonstration + accessToken). */
+export function simulateDemo(
+  t: Backend,
+  created: CreatedOperation,
+  outcome: 'approved' | 'declined',
+  accessToken = created.accessToken,
+) {
+  return t.action(api.public.payments.simulateDemoPayment, {
+    operationId: created.operationId,
+    accessToken,
+    outcome,
+  })
+}
+
 export function loadTransactions(t: Backend, operationId: Id<'paymentOperations'>) {
   return t.run((ctx) =>
     ctx.db

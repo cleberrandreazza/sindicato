@@ -67,6 +67,7 @@ function confirmedView(patch: Partial<OperationView> = {}): OperationView {
       message: 'Pagamento confirmado.',
       pix: null,
     },
+    demoSimulationAllowed: false,
     ...patch,
   }
 }

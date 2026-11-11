@@ -1,5 +1,5 @@
-import { v } from 'convex/values'
-import { internal } from '../_generated/api'
+import { ConvexError, v } from 'convex/values'
+import { api, internal } from '../_generated/api'
 import type { Id } from '../_generated/dataModel'
 import { action, mutation, query } from '../_generated/server'
 import {
@@ -19,6 +19,7 @@ import type {
   PaymentProviderName,
 } from '../domain/statuses'
 import { defaultUsagePolicy } from '../domain/usagePolicy'
+import { executeMockPaymentSimulation } from '../dev/mockSimulation'
 import { resolveMemberSelection } from '../members/family'
 import { requireSession } from '../members/sessions'
 import { findConflicts } from '../payments/claims'
@@ -33,6 +34,7 @@ import {
   findOperationByRequest,
   replayOperation,
 } from '../payments/operations'
+import { isDemonstrationEnv } from '../providers/appEnv'
 import { ProviderError } from '../providers/errors'
 import type { CardCharge, PixCharge } from '../providers/paymentProvider'
 import { getPaymentProvider } from '../providers/registry'
@@ -40,10 +42,21 @@ import { readRateLimit, recordRateLimitHit } from '../security/rateLimit'
 
 /**
  * FUNÇÕES PÚBLICAS: duplicidade, criação, cobrança e consulta de operação.
- * O navegador nunca envia valores nem estados: só *quem* (vínculos), *quando* (data) e *como
- * pagar* (Pix ou token de cartão). Não existe função pública que confirme pagamento ou altere
- * estado financeiro/operacional: isso só acontece por notificações autenticadas do provedor, fora desta pasta.
+ * O navegador nunca envia valores nem estados financeiros: só *quem* (vínculos), *quando* (data)
+ * e *como pagar* (Pix ou token de cartão). Confirmação financeira entra pela porta do provedor
+ * (`processProviderNotification`). Em `APP_ENV=demonstration` + PaymentProvider mock, existe
+ * `simulateDemoPayment`: exige `accessToken` da operação e só dispara a mesma notificação
+ * assinada do mock — o cliente envia apenas um outcome simbólico (approved/declined).
  */
+
+function demoSimulationAllowedHere(): boolean {
+  if (!isDemonstrationEnv()) return false
+  try {
+    return getPaymentProvider().name === 'mock'
+  } catch {
+    return false
+  }
+}
 
 const selectionArgs = {
   memberId: v.id('members'),
@@ -223,6 +236,12 @@ export interface OperationView {
   paidAt: number | null
   /** Cobrança mais recente da operação (para reexibir o Pix após recarregar a página). */
   payment: PaymentView | null
+  /**
+   * `true` somente quando o deployment está em `APP_ENV=demonstration` e o PaymentProvider é
+   * mock. O navegador usa este sinal para exibir controles de simulação; a autorização real
+   * continua no backend em `simulateDemoPayment`.
+   */
+  demoSimulationAllowed: boolean
 }
 
 /**
@@ -293,6 +312,8 @@ export const getOperation = query({
       })),
       paidAt: operation.paidAt ?? null,
       payment: latestTransaction ? buildPaymentView(operation, latestTransaction, now) : null,
+      /** Controles de simulação no checkout: só true com APP_ENV=demonstration + mock. */
+      demoSimulationAllowed: demoSimulationAllowedHere(),
     }
   },
 })
@@ -479,5 +500,99 @@ export const requestReceiptEmail = action({
     if (result.status === 'sent') throw publicError('email_already_sent')
     if (result.status === 'pending') throw publicError('email_in_progress')
     return { status: 'queued' }
+  },
+})
+
+export type DemoSimulationOutcome = 'approved' | 'declined'
+
+export interface SimulateDemoPaymentResult {
+  outcome: DemoSimulationOutcome
+  /** Estado oficial após a simulação (mesma forma de `getOperation`). */
+  operation: OperationView
+  /** Eco do processador: útil para idempotência / diagnóstico na UI. */
+  notification: {
+    status: 'accepted' | 'rejected'
+    duplicate?: boolean
+    outcome?: string
+  }
+}
+
+/**
+ * Confirmação **demonstrativa** pública: só com `APP_ENV=demonstration` e PaymentProvider mock.
+ *
+ * Recebe `operationId` + `accessToken` (mesma credencial de `getOperation`/`startPayment`) e um
+ * `outcome` simbólico (`approved` | `declined`). O navegador **não** envia status financeiro.
+ * O backend monta a notificação assinada do mock e a entrega a `processProviderNotification`
+ * (mesma porta do webhook real / `dev/simulate`).
+ *
+ * Em qualquer outro `APP_ENV` (incluindo produção e development) responde
+ * `demo_simulation_disabled`. Token inválido ou operação alheia → `operation_not_found`.
+ */
+export const simulateDemoPayment = action({
+  args: {
+    operationId: v.id('paymentOperations'),
+    accessToken: v.string(),
+    outcome: v.union(v.literal('approved'), v.literal('declined')),
+  },
+  handler: async (ctx, args): Promise<SimulateDemoPaymentResult> => {
+    if (!isDemonstrationEnv()) {
+      throw publicError('demo_simulation_disabled')
+    }
+    let providerName: string
+    try {
+      providerName = getPaymentProvider().name
+    } catch {
+      throw publicError('demo_simulation_disabled')
+    }
+    if (providerName !== 'mock') {
+      throw publicError('demo_simulation_disabled')
+    }
+    if (args.accessToken.length === 0 || args.accessToken.length > 128) {
+      throw publicError('operation_not_found')
+    }
+
+    await ctx.runMutation(internal.payments.charges.authorizeDemoSimulation, {
+      operationId: args.operationId,
+      accessTokenHash: await hashAccessToken(args.accessToken),
+    })
+
+    let simulation
+    try {
+      simulation = await executeMockPaymentSimulation(ctx, {
+        operationId: args.operationId,
+        outcome: args.outcome,
+      })
+    } catch (error) {
+      if (error instanceof ConvexError) {
+        const data = error.data
+        if (
+          typeof data === 'object' &&
+          data !== null &&
+          'code' in data &&
+          (data as { code?: unknown }).code === 'no_charge_for_operation'
+        ) {
+          throw publicError('demo_payment_required')
+        }
+      }
+      throw error
+    }
+
+    const operation = await ctx.runQuery(api.public.payments.getOperation, {
+      operationId: args.operationId,
+      accessToken: args.accessToken,
+    })
+
+    return {
+      outcome: args.outcome,
+      operation,
+      notification:
+        simulation.notification.status === 'accepted'
+          ? {
+              status: 'accepted',
+              duplicate: simulation.notification.duplicate,
+              outcome: simulation.notification.outcome,
+            }
+          : { status: 'rejected' },
+    }
   },
 })

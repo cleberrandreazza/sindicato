@@ -9,14 +9,14 @@ pessoas e a data de utilização e paga via Pix ou cartão em até 15 minutos.
 > usam adaptadores **mockados** (nenhum e-mail real); WhatsApp está só preparado (`not_configured`).
 > Stripe real ainda não existe. Este projeto **não** é um sistema geral de reservas.
 
-| Etapa da jornada      | Situação                                                                           |
-| --------------------- | ---------------------------------------------------------------------------------- |
-| 1. Identificação      | Implementada (`/`)                                                                 |
-| 2. Seleção de pessoas | Implementada (`/pessoas`); valida a seleção no backend e para antes da data        |
-| 3. Data de utilização | Implementada (`/data`); regra **provisória**: qualquer data de hoje em diante      |
-| 4. Resumo             | Implementada (`/resumo`); cria a operação no backend com idempotência              |
-| 5. Pagamento          | Implementada (`/pagamento`); Pix/cartão **simulados** (mock); Stripe real pendente |
-| 6. Comprovante        | Implementada (`/comprovante`); PDF + e-mail **mock**; WhatsApp preparado           |
+| Etapa da jornada      | Situação                                                                                      |
+| --------------------- | --------------------------------------------------------------------------------------------- |
+| 1. Identificação      | Implementada (`/`)                                                                            |
+| 2. Seleção de pessoas | Implementada (`/pessoas`); valida a seleção no backend e para antes da data                   |
+| 3. Data de utilização | Implementada (`/data`); regra **provisória**: qualquer data de hoje em diante                 |
+| 4. Resumo             | Implementada (`/resumo`); cria a operação no backend com idempotência                         |
+| 5. Pagamento          | Implementada (`/pagamento`); Pix/cartão **simulados**; demo pública com `simulateDemoPayment` |
+| 6. Comprovante        | Implementada (`/comprovante`); PDF + e-mail **mock**; WhatsApp preparado                      |
 
 ## Stack
 
@@ -252,8 +252,12 @@ para testar que a mesma pessoa não paga duas vezes na mesma data, mesmo por tit
 Para experimentar a API pública (`convex/public/`), consulte com carteirinha e CPF acima; o
 contrato completo está em [docs/architecture.md](docs/architecture.md#api-pública-contrato-com-o-frontend).
 Operações podem ser criadas, consultadas e **cobradas** (`startPayment`, Pix ou cartão com token
-fictício). Nenhum pagamento acontece sozinho: para "pagar" no desenvolvimento ou na demonstração
-use a simulação interna (só com `APP_ENV=development|demonstration` e provider mock):
+fictício). Nenhum pagamento real. Confirmação:
+
+- **Demonstração hospedada** (`APP_ENV=demonstration`): na tela `/pagamento`, botões “Simular
+  aprovado/recusado” chamam `public/payments:simulateDemoPayment` (exige `accessToken`; o
+  navegador não envia status financeiro).
+- **Desenvolvimento / CLI:** simulação interna (só com mocks permitidos):
 
 ```bash
 npx convex run dev/simulate:simulatePayment '{"operationId":"<id>","outcome":"approved"}'

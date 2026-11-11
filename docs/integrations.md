@@ -235,8 +235,10 @@ respondem depois que `APP_ENV` permite mocks — não precisam de seed no banco.
 ### Limitações do ambiente de demonstração hospedada
 
 - Providers mockados: nenhum Stripe, WhatsApp ou e-mail real.
-- URL pública na Vercel permite iniciar cobranças **simuladas** no Convex de demo; confirmação Pix
-  via navegador continua impossível (`simulatePayment` é interna).
+- Em `APP_ENV=demonstration`, a action pública `simulateDemoPayment` permite simular
+  aprovado/recusado **somente** com o `accessToken` da operação e PaymentProvider mock; o
+  navegador não envia status financeiro. Em produção a mesma action é recusada.
+- A CLI `dev/simulate:simulatePayment` continua interna (útil em development).
 - Proteção por senha, se desejada, deve ser da **hospedagem** (Vercel Deployment Protection), não
   autenticação improvisada no React. Ver [deployment-guide.md](./deployment-guide.md).
 
@@ -253,12 +255,12 @@ Nenhuma regra de negócio muda.
 
 A tela `/pagamento` usa o **mock**:
 
-| Cenário                                              | Como exercitar                                                                                                                                          |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pix pendente + QR demonstrativo                      | `startPayment` com `paymentMethod: 'pix'`                                                                                                               |
-| Pix aprovado / recusado / tardio                     | CLI: `npx convex run dev/simulate:simulatePayment '{"operationId":"…","outcome":"approved"}'` (só `APP_ENV=development\|demonstration` + provider mock) |
-| Cartão aprovado / recusado / pendente / indisponível | tokens `tok_mock_approved`, `tok_mock_declined`, `tok_mock_pending`, `tok_mock_unavailable`                                                             |
-| Idempotência                                         | repetir `startPayment` com a mesma forma → `reused: true`                                                                                               |
+| Cenário                                              | Como exercitar                                                                                                                                                      |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pix pendente + QR demonstrativo                      | `startPayment` com `paymentMethod: 'pix'`                                                                                                                           |
+| Pix aprovado / recusado / tardio                     | Demo pública: `simulateDemoPayment` (`approved`/`declined`, só `APP_ENV=demonstration`). CLI: `dev/simulate:simulatePayment` (internal, development\|demonstration) |
+| Cartão aprovado / recusado / pendente / indisponível | tokens `tok_mock_approved`, `tok_mock_declined`, `tok_mock_pending`, `tok_mock_unavailable`                                                                         |
+| Idempotência                                         | repetir `startPayment` com a mesma forma → `reused: true`                                                                                                           |
 
 **Limitações da simulação:** QR/código Pix não são pagáveis; tokens de cartão não são dados
 bancários; não há webhook HTTP público; a simulação **não** está na superfície `convex/public/`

@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as dev_mockSimulation from "../dev/mockSimulation.js";
 import type * as dev_simulate from "../dev/simulate.js";
 import type * as domain_chargeMessages from "../domain/chargeMessages.js";
 import type * as domain_charges from "../domain/charges.js";
@@ -63,6 +64,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "dev/mockSimulation": typeof dev_mockSimulation;
   "dev/simulate": typeof dev_simulate;
   "domain/chargeMessages": typeof domain_chargeMessages;
   "domain/charges": typeof domain_charges;

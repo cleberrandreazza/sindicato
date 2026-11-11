@@ -24,6 +24,13 @@ export const CREATE_OPERATION_WINDOW_MS = 15 * 60 * 1000
 export const MAX_CHARGE_ATTEMPTS_PER_OPERATION = 3
 
 /**
+ * Simulações públicas de confirmação por operação (`simulateDemoPayment`), só em
+ * `APP_ENV=demonstration`. Limita spam de cliques no link público.
+ */
+export const DEMO_SIMULATION_MAX_PER_OPERATION = 20
+export const DEMO_SIMULATION_WINDOW_MS = 15 * 60 * 1000
+
+/**
  * Uma tentativa de cobrança "em andamento" há mais que isto é considerada interrompida (ex.: a
  * action caiu) e pode ser retomada com a mesma chave de idempotência.
  */

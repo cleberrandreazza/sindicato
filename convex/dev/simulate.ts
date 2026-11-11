@@ -1,25 +1,23 @@
 import { ConvexError, v } from 'convex/values'
-import { internal } from '../_generated/api'
 import { internalAction } from '../_generated/server'
-import { processProviderNotification, type NotificationResult } from '../payments/webhookProcessor'
-import { MOCK_WEBHOOK_SIGNATURE } from '../providers/mock/mockPaymentProvider'
 import { allowsMockProviders } from '../providers/appEnv'
 import { getPaymentProvider } from '../providers/registry'
+import {
+  executeMockPaymentSimulation,
+  type SimulationOutcome,
+  type SimulationResult,
+} from './mockSimulation'
 
 /**
- * SIMULAÇÃO DE PAGAMENTO, SOMENTE DESENVOLVIMENTO.
- *
- * Como o mock não tem relógio nem recebe dinheiro, esta função faz o papel do provedor: monta
- * uma notificação assinada (formato do mock) e a entrega ao MESMO processador que o webhook real
- * usará (`processProviderNotification`). Assim exercita a verificação de assinatura, o registro
- * do evento, a idempotência e as regras de prazo/valor/análise, sem atalhos.
+ * SIMULAÇÃO DE PAGAMENTO (CLI / painel), ambientes com mocks permitidos.
  *
  * É `internalAction`: não existe para o navegador. Execute pelo painel do Convex ou pela CLI:
  *
  *   npx convex run dev/simulate:simulatePayment '{"operationId":"…","outcome":"approved"}'
  *
- * Mesmo sendo interna, recusa rodar fora de `APP_ENV=development|demonstration` ou com provider
- * diferente do mock, para que uma configuração de produção nunca consiga "pagar" uma operação.
+ * Recusa rodar fora de `APP_ENV=development|demonstration` ou com provider diferente do mock.
+ * Na demonstração hospedada, o navegador usa `public/payments:simulateDemoPayment` (só
+ * `APP_ENV=demonstration` + accessToken), que reutiliza o mesmo núcleo.
  *
  * Resultados (`outcome`):
  * - `approved`: recebimento agora (se o prazo já passou, é tardio, como na vida real);
@@ -30,13 +28,7 @@ import { getPaymentProvider } from '../providers/registry'
  * Repetir com o mesmo `eventId` simula reenvio do provedor; omitir gera um evento novo.
  */
 
-export type SimulationOutcome = 'approved' | 'declined' | 'pending' | 'approved_after_expiry'
-
-export interface SimulationResult {
-  eventId: string
-  providerTransactionId: string
-  notification: NotificationResult
-}
+export type { SimulationOutcome, SimulationResult }
 
 export const simulatePayment = internalAction({
   args: {
@@ -61,30 +53,6 @@ export const simulatePayment = internalAction({
     }
     if (providerName !== 'mock') throw new ConvexError({ code: 'simulation_disabled' })
 
-    const target = await ctx.runQuery(internal.payments.charges.latestCharge, {
-      operationId: args.operationId,
-    })
-    if (!target) throw new ConvexError({ code: 'no_charge_for_operation' })
-
-    const now = Date.now()
-    const status =
-      args.outcome === 'declined' ? 'failed' : args.outcome === 'pending' ? 'pending' : 'succeeded'
-    const occurredAt =
-      args.outcome === 'approved_after_expiry'
-        ? Math.max(now, target.operationExpiresAt + 1_000)
-        : now
-    const eventId = args.eventId ?? `sim_${args.outcome}_${crypto.randomUUID()}`
-
-    const notification = await processProviderNotification(ctx, {
-      rawBody: JSON.stringify({
-        eventId,
-        providerTransactionId: target.providerTransactionId,
-        status,
-        amountCents: target.amountCents,
-        occurredAt,
-      }),
-      headers: { 'x-mock-signature': MOCK_WEBHOOK_SIGNATURE },
-    })
-    return { eventId, providerTransactionId: target.providerTransactionId, notification }
+    return await executeMockPaymentSimulation(ctx, args)
   },
 })

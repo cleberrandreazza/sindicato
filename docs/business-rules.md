@@ -535,10 +535,11 @@ recusa sem `APP_ENV=development`).
   navegador escolhe o resultado pelo token (simula o SDK); com um provedor real o resultado é do
   provedor.
 - **Pix:** o "copia e cola" e o QR são fictícios e não pagáveis; nenhum banco os reconhece.
-- **Simulação de pagamento:** só por `dev/simulate:simulatePayment` (interna, CLI/painel; exige
-  `APP_ENV=development` ou `demonstration` + provider mock). Nenhum pagamento acontece sozinho. O
-  mock não tem relógio: "pagamento tardio" é simulado com `approved_after_expiry` ou avançando o
-  relógio.
+- **Simulação de pagamento:** CLI/painel via `dev/simulate:simulatePayment` (interna;
+  `APP_ENV=development|demonstration` + mock). Na demonstração hospedada, também
+  `public/payments:simulateDemoPayment` (exige `accessToken`, só `APP_ENV=demonstration` + mock;
+  outcomes `approved`/`declined`; nunca aceita status financeiro do cliente). Nenhum pagamento
+  real. "Pagamento tardio" na demo pública: aprovar após o prazo (mesmas regras de negócio).
 - **Cobranças órfãs:** se a action cair depois de o provedor criar a cobrança e antes de gravá-la
   localmente, a retomada (mesma chave de idempotência) recupera a mesma cobrança; se ninguém
   retomar, um webhook posterior dessa cobrança vira `unknown_transaction` + alerta. Não há
@@ -575,4 +576,5 @@ Ambiente separado do desenvolvimento local e da futura produção. Detalhes oper
 
 **Limites dos pagamentos simulados:** valor e prazo seguem as regras de negócio (R$ 30/pessoa,
 15 minutos); o “pagamento” não liquida dinheiro. Cartão mock aprova/recusa conforme token; Pix
-mock fica pendente até simulação autorizada na CLI/Dashboard.
+mock fica pendente até simulação autorizada (`simulateDemoPayment` na demo pública, ou CLI
+interna). Rate limit: 20 simulações públicas / 15 min por operação.

@@ -206,6 +206,7 @@ describe('checkRecoveredOperation', () => {
     notifications: [],
     paidAt: null,
     payment: null,
+    demoSimulationAllowed: false,
     ...patch,
   })
 

@@ -7,6 +7,7 @@ import type { Id } from '../../convex/_generated/dataModel'
 import type {
   GetOperationFn,
   OperationView,
+  SimulateDemoPaymentFn,
   StartPaymentFn,
   StartPaymentResult,
 } from '../../src/features/payment/api/start-payment'
@@ -61,6 +62,7 @@ const awaitingView = (patch: Partial<OperationView> = {}): OperationView => ({
   notifications: [],
   paidAt: null,
   payment: null,
+  demoSimulationAllowed: false,
   ...patch,
 })
 
@@ -133,6 +135,7 @@ function setup(
   options: {
     start?: StartPaymentFn
     getState?: GetOperationFn
+    simulateDemo?: SimulateDemoPaymentFn
     nowMs?: () => number
     onFinish?: () => void
     onSessionExpired?: () => void
@@ -146,6 +149,7 @@ function setup(
       throw new Error('start não configurado')
     })
   const getState = options.getState ?? vi.fn<GetOperationFn>(async () => awaitingView())
+  const simulateDemo = options.simulateDemo
   const user = userEvent.setup()
   render(
     <PaymentPage
@@ -154,12 +158,13 @@ function setup(
       onSessionExpired={options.onSessionExpired}
       start={start}
       getState={getState}
+      simulateDemo={simulateDemo}
       nowMs={options.nowMs ?? (() => NOW)}
       pollIntervalMs={options.pollIntervalMs ?? 60_000}
       copyText={options.copyText}
     />,
   )
-  return { user, start, getState }
+  return { user, start, getState, simulateDemo }
 }
 
 describe('PaymentPage', () => {
@@ -361,5 +366,70 @@ describe('PaymentPage', () => {
     expect(document.body.textContent).toMatch(/15 minutos/)
     // Não presume recebimento só porque o prazo zerou.
     expect(document.body.textContent).not.toMatch(/pagamento aprovado|pagamento confirmado/i)
+  })
+
+  it('não mostra controles de simulação sem demoSimulationAllowed do backend', async () => {
+    const getState = vi.fn<GetOperationFn>(async () =>
+      awaitingView({
+        demoSimulationAllowed: false,
+        payment: pixPending().payment,
+      }),
+    )
+    setup({ getState })
+    expect(await screen.findByTestId('pix-panel')).toBeTruthy()
+    expect(screen.queryByTestId('demo-simulation-panel')).toBeNull()
+  })
+
+  it('demonstração: painel de simulação aprova via simulateDemoPayment (sem status financeiro)', async () => {
+    const onOutcomeReady = vi.fn()
+    const simulateDemo = vi.fn<SimulateDemoPaymentFn>(async (input) => {
+      expect(input.outcome).toBe('approved')
+      expect(Object.keys(input).sort()).toEqual(['accessToken', 'operationId', 'outcome'])
+      return {
+        outcome: 'approved',
+        notification: { status: 'accepted', duplicate: false, outcome: 'confirmed' },
+        operation: awaitingView({
+          demoSimulationAllowed: true,
+          financialStatus: 'paid',
+          operationalStatus: 'confirmed',
+          presentation: {
+            code: 'confirmed',
+            message: 'Pagamento confirmado.',
+          },
+          receiptNumber: 'SC-2026-000001',
+          receipt: { receiptNumber: 'SC-2026-000001', fileReady: true },
+          payment: {
+            ...pixPending().payment,
+            status: 'succeeded',
+            message: 'Pagamento confirmado.',
+            pix: null,
+          },
+        }),
+      }
+    })
+    const getState = vi.fn<GetOperationFn>(async () =>
+      awaitingView({
+        demoSimulationAllowed: true,
+        payment: pixPending().payment,
+      }),
+    )
+    const user = userEvent.setup()
+    render(
+      <PaymentPage
+        operation={operation}
+        onFinish={() => {}}
+        onOutcomeReady={onOutcomeReady}
+        start={vi.fn()}
+        getState={getState}
+        simulateDemo={simulateDemo}
+        nowMs={() => NOW}
+        pollIntervalMs={60_000}
+      />,
+    )
+    expect(await screen.findByTestId('demo-simulation-panel')).toBeTruthy()
+    expect(screen.getByText(/Nenhum dinheiro será movimentado/i)).toBeTruthy()
+    await user.click(screen.getByTestId('demo-simulate-approved'))
+    await waitFor(() => expect(simulateDemo).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(onOutcomeReady).toHaveBeenCalled())
   })
 })
