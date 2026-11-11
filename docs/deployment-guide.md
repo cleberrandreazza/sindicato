@@ -6,18 +6,20 @@ local (`dev:grateful-chipmunk-18`).
 
 > **Estado atual (backend):** o Convex de demonstração **já existe e está implantado** (schema,
 > funções, variáveis mock). URL: `https://coordinated-mink-914.convex.cloud`. Lookup fictício
-> validado (`100001` / `100.000.001-08`).
+> validado (`100001` / `100.000.001-08`). Providers reais (Stripe / e-mail / WhatsApp) **não**
+> estão ativos.
 >
-> **Estado atual (frontend):** a configuração Vercel (`vercel.json`) está no repositório, mas
-> **ainda não há URL HTTPS pública validada na Vercel**. Não trate o sistema como publicado até
-> importar o GitHub, definir `VITE_CONVEX_URL` e validar o checklist abaixo.
+> **Estado atual (frontend):** `vercel.json` está pronto para o **primeiro deployment** de
+> demonstração. O push em `master` deve iniciar o build na Vercel **se** o repositório
+> `cleberrandreazza/sindicato` já estiver importado e `VITE_CONVEX_URL` configurada. Até existir
+> uma URL HTTPS validada, **não** trate o sistema como publicado.
 
 ## Ambientes
 
 | Ambiente        | Frontend                      | Convex                                                           | Dados             | Providers                      |
 | --------------- | ----------------------------- | ---------------------------------------------------------------- | ----------------- | ------------------------------ |
 | Local (dev)     | `pnpm dev` → `localhost:5173` | `grateful-chipmunk-18` (projeto original)                        | Fictícios (mock)  | Mock (`APP_ENV=development`)   |
-| Demonstração    | Vercel (a configurar)         | **Projeto** `sindicato-demo` → deployment `coordinated-mink-914` | Somente fictícios | Mock (`APP_ENV=demonstration`) |
+| Demonstração    | Vercel (1º deploy)            | **Projeto** `sindicato-demo` → deployment `coordinated-mink-914` | Somente fictícios | Mock (`APP_ENV=demonstration`) |
 | Produção futura | Vercel (projeto produção)     | Deployment sem mocks                                             | Cadastro real     | Providers reais                |
 
 **Regra:** nunca apontar a Vercel de demonstração para `grateful-chipmunk-18`. Desenvolvimento e
@@ -96,7 +98,23 @@ pnpm exec convex run --deployment cleberandreazza:sindicato-demo:demo \
   pedido institucional. Ausência de senha **não** autoriza expor funções internas — a proteção
   continua sendo a superfície pública fechada + gates de `APP_ENV`.
 
-## Frontend (Vercel) — preparar, ainda não publicar
+## Frontend (Vercel) — primeiro deployment de demonstração
+
+### Pré-requisitos no painel Vercel (uma vez)
+
+Se o projeto **ainda não** estiver importado:
+
+1. Em [vercel.com](https://vercel.com), **Import** → `cleberrandreazza/sindicato`.
+2. Framework: **Vite** (já em [`vercel.json`](../vercel.json)).
+3. Build: `pnpm build` · Output: `dist` · Install: `pnpm install`.
+4. Environment Variables (Production **e** Preview):
+   - `VITE_CONVEX_URL` = `https://coordinated-mink-914.convex.cloud`
+   - **Não** definir `VITE_CONVEX_SITE_URL` nem qualquer segredo em `VITE_*`.
+5. **Não** ativar Deployment Protection / senha (acesso da diretoria sem autenticação).
+6. Branch de produção: `master` (deploy automático no push).
+
+Se o projeto **já** estiver conectado e a variável acima definida, o push em `master` inicia o
+deployment automaticamente. **Não** é necessário `vercel deploy` pelo CLI neste fluxo.
 
 ### Variáveis
 
@@ -106,19 +124,17 @@ pnpm exec convex run --deployment cleberandreazza:sindicato-demo:demo \
 | `VITE_CONVEX_SITE_URL` | Não         | Não configurar (código não usa)             |
 | Segredos em `VITE_*`   | Proibido    | —                                           |
 
-Production **e** Preview devem apontar para o mesmo Convex de demonstração neste momento.
+### Configuração no repositório (`vercel.json`)
 
-### Importação do GitHub (manual)
+- Framework Vite, `pnpm build` → `dist`, `pnpm install`.
+- Rewrite SPA: `/(.*)` → `/index.html` (TanStack Router: `/pessoas`, `/pagamento`, etc.).
 
-1. Em [vercel.com](https://vercel.com), **Import** → `cleberrandreazza/sindicato`.
-2. Framework: **Vite** (já em `vercel.json`).
-3. Build: `pnpm build` · Output: `dist` · Install: `pnpm install`.
-4. Environment Variables: `VITE_CONVEX_URL` = URL do Convex de demo (Production + Preview).
-5. **Não** ativar Deployment Protection / senha (acesso da diretoria sem autenticação).
-6. Disparar o deploy e anotar a URL HTTPS gerada.
-7. Só então considerar a demonstração “no ar” e executar o checklist.
+### Após o deploy
 
-Rewrites SPA: `vercel.json` reescreve `/(.*)` → `/index.html` (TanStack Router).
+1. Abrir a URL HTTPS do deployment no Dashboard Vercel.
+2. Confirmar que refresh em rota profunda não retorna 404.
+3. Executar o [checklist](#checklist-de-validação-pós-publicação-reproduzível).
+4. Só então comunicar a URL à diretoria.
 
 ## Checklist de validação pós-publicação (reproduzível)
 

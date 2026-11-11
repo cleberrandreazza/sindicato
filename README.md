@@ -24,17 +24,18 @@ React · TypeScript (strict) · Vite · TanStack Router · Tailwind CSS v4 · sh
 
 ## Ambientes
 
-| Ambiente     | Frontend                | Backend Convex                                    | Providers                      |
-| ------------ | ----------------------- | ------------------------------------------------- | ------------------------------ |
-| Local        | Vite (`pnpm dev`)       | `grateful-chipmunk-18` (`APP_ENV=development`)    | Mock                           |
-| Demonstração | Vercel (**a publicar**) | Projeto `sindicato-demo` → `coordinated-mink-914` | Mock (`APP_ENV=demonstration`) |
-| Produção     | Vercel (futuro)         | Deployment sem mocks                              | Reais; mocks **recusados**     |
+| Ambiente     | Frontend           | Backend Convex                                    | Providers                      |
+| ------------ | ------------------ | ------------------------------------------------- | ------------------------------ |
+| Local        | Vite (`pnpm dev`)  | `grateful-chipmunk-18` (`APP_ENV=development`)    | Mock                           |
+| Demonstração | Vercel (1º deploy) | Projeto `sindicato-demo` → `coordinated-mink-914` | Mock (`APP_ENV=demonstration`) |
+| Produção     | Vercel (futuro)    | Deployment sem mocks                              | Reais; mocks **recusados**     |
 
 - Convex de demo (backend): `https://coordinated-mink-914.convex.cloud` — schema/funções
-  implantados; dados só fictícios.
-- Frontend na Vercel: **ainda sem URL HTTPS validada**. Quando existir, use
-  `VITE_CONVEX_URL=https://coordinated-mink-914.convex.cloud`.
+  implantados; dados só fictícios; **não** é produção financeira.
+- Frontend: `vercel.json` pronto (Vite, `pnpm build` → `dist`, rewrite SPA). A única variável
+  necessária na Vercel é `VITE_CONVEX_URL=https://coordinated-mink-914.convex.cloud`.
 - Guia: [docs/deployment-guide.md](docs/deployment-guide.md).
+- Enquanto a URL HTTPS da Vercel não estiver validada, **não** trate o sistema como publicado.
 
 ## Documentação
 
@@ -224,13 +225,15 @@ sem `MEMBER_PROVIDER=mock`). Qualquer outro valor (incluindo ausência) **recusa
 
 ## Demonstração para a diretoria
 
-**Backend de demonstração:** pronto (`coordinated-mink-914`). **Frontend Vercel:** pendente de
-importação manual do GitHub (sem senha / Deployment Protection — acesso público institucional).
+**Backend:** Convex `coordinated-mink-914` com mocks (`APP_ENV=demonstration`).  
+**Frontend:** preparado para o 1º deployment na Vercel (push em `master` dispara o build se o
+repositório estiver conectado). Acesso institucional **público** (sem senha / Deployment
+Protection).
 
-Enquanto não houver URL Vercel validada, use o ambiente local ou o roteiro em
+Enquanto não houver URL HTTPS validada na Vercel, use o ambiente local ou o roteiro em
 [docs/demo-script.md](docs/demo-script.md). Quando a demo estiver no ar:
 
-1. Acesse a URL HTTPS da Vercel (pública, sem senha).
+1. Abra a URL HTTPS gerada pela Vercel (Dashboard → Project → Domains / Deployments).
 2. Use somente os [dados fictícios](#dados-fictícios-de-teste-somente-desenvolvimento--demonstração) abaixo.
 3. Checkout é **simulado**; não há pagamento real nem WhatsApp/e-mail reais.
 4. Checklist pós-publicação: [docs/deployment-guide.md](docs/deployment-guide.md).

@@ -18,8 +18,8 @@ Funcionalidades **implementadas e cobertas por testes automatizados** na 1ª ent
 4. **Resumo e criação** da operação financeira com prazo de **15 minutos**, valor calculado no
    servidor e idempotência (`requestId`).
 5. **Checkout** Pix e cartão via **PaymentProvider mockado** (não processa dinheiro real).
-6. **Confirmação autorizada** só pelo backend (eventos do provedor / simulação interna de
-   desenvolvimento).
+6. **Confirmação autorizada** só pelo backend (eventos do provedor; na demo hospedada,
+   `simulateDemoPayment` com `accessToken`; localmente, simulação interna).
 7. **Comprovante PDF** após pagamento confirmado no prazo (File Storage + número `SC-AAAA-NNNNNN`).
 8. **Outbox de e-mail** com adaptador **mockado** (registra tentativa; não envia e-mail real).
 9. **WhatsApp preparado** na arquitetura, com estado `not_configured` (nenhum envio).
@@ -33,16 +33,21 @@ A jornada pública cobre as seis etapas em rotas `/` → `/pessoas` → `/data` 
 
 ## Demonstrável
 
-Pode ser apresentado **hoje** com dados fictícios e ambiente de desenvolvimento:
+Pode ser apresentado com dados fictícios em ambiente **local** (`APP_ENV=development`) ou na
+**demonstração hospedada** (Convex `coordinated-mink-914` + frontend Vercel, `APP_ENV=demonstration`).
 
-| Demonstração                              | Como                                                |
-| ----------------------------------------- | --------------------------------------------------- |
-| Fluxo completo do associado               | App + Convex em `development` com mocks             |
-| Pix “pendente” e QR/código demonstrativos | Checkout mock (não pagáveis)                        |
-| Cartão aprovado / recusado                | Tokens fictícios `tok_mock_*` (sem dados de cartão) |
-| Confirmação e comprovante                 | Após evento autorizado / simulação interna          |
-| Pagamento após o prazo                    | Cenário de análise (`under_review`)                 |
-| Falha de e-mail sem desfazer pagamento    | Outbox + histórico de notificação                   |
+| Demonstração                              | Como                                                                |
+| ----------------------------------------- | ------------------------------------------------------------------- |
+| Fluxo completo do associado               | App + Convex com mocks (`development` ou `demonstration`)           |
+| Pix “pendente” e QR/código demonstrativos | Checkout mock (não pagáveis)                                        |
+| Cartão aprovado / recusado                | Tokens fictícios `tok_mock_*` (sem dados de cartão)                 |
+| Confirmação e comprovante                 | Demo pública: `simulateDemoPayment`; local: CLI / simulação interna |
+| Pagamento após o prazo                    | Cenário de análise (`under_review`)                                 |
+| Falha de e-mail sem desfazer pagamento    | Outbox + histórico de notificação                                   |
+
+> **Isto continua sendo demonstração com mocks — não é produção financeira.** Não há Stripe real,
+> e-mail real nem WhatsApp. Associados e CPFs são fictícios. Ausência de senha na URL pública não
+> torna o ambiente um sistema de cobrança real.
 
 **Deixar explícito na apresentação:** nenhum pagamento real, nenhum e-mail real e nenhum WhatsApp
 estão sendo enviados.
@@ -101,8 +106,8 @@ demonstração**.
 
 ## Próximos passos (priorizados)
 
-1. **Validar a demonstração** com a diretoria usando apenas mocks e dados fictícios (este
-   documento + ambiente de desenvolvimento).
+1. **Validar a demonstração** com a diretoria usando apenas mocks e dados fictícios (ambiente
+   hospedado na Vercel + Convex `sindicato-demo`, ou local).
 2. **Fechar decisões de negócio** da lista “Dependente do sindicato” (especialmente funcionamento,
    isenções e dados do comprovante).
 3. **Contratar / credenciar** cadastro oficial, Stripe (ou outro PSP) e serviço de e-mail.
@@ -119,6 +124,7 @@ demonstração**.
 
 A 1ª entrega entrega a **jornada completa do associado até o comprovante**, com regras financeiras
 separadas (cobrança × financeiro × operacional), proteção contra duplicidade e comprovante PDF
-após confirmação válida. O que ainda **não** está pronto para cobrança real é a conexão com
-**cadastro oficial, meio de pagamento real e canais reais de notificação** — e as regras
-operacionais finais que só o sindicato pode definir.
+após confirmação válida. O ambiente publicado para a diretoria, quando existir URL na Vercel, é
+**demonstração com mocks** — não produção financeira. O que ainda **não** está pronto para
+cobrança real é a conexão com **cadastro oficial, meio de pagamento real e canais reais de
+notificação** — e as regras operacionais finais que só o sindicato pode definir.
