@@ -231,6 +231,31 @@ Para adicionar uma integração real:
 
 Nenhuma regra de negócio muda.
 
+## Checkout na interface (estado atual)
+
+A tela `/pagamento` usa o **mock**:
+
+| Cenário                                              | Como exercitar                                                                                                                           |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Pix pendente + QR demonstrativo                      | `startPayment` com `paymentMethod: 'pix'`                                                                                                |
+| Pix aprovado / recusado / tardio                     | CLI: `npx convex run dev/simulate:simulatePayment '{"operationId":"…","outcome":"approved"}'` (só `APP_ENV=development` + provider mock) |
+| Cartão aprovado / recusado / pendente / indisponível | tokens `tok_mock_approved`, `tok_mock_declined`, `tok_mock_pending`, `tok_mock_unavailable`                                              |
+| Idempotência                                         | repetir `startPayment` com a mesma forma → `reused: true`                                                                                |
+
+**Limitações da simulação:** QR/código Pix não são pagáveis; tokens de cartão não são dados
+bancários; não há webhook HTTP público; a simulação **não** está na superfície `convex/public/`
+(teste `publicSurface` garante isso).
+
+## O que falta para Stripe real
+
+1. Implementar `PaymentProvider` Stripe (`createPixCharge` / `createCardCharge` com PaymentIntent).
+2. HTTP action de webhook assinada → `processProviderNotification` (já preparado).
+3. SDK no navegador para tokenizar cartão (nunca enviar PAN/CVV ao Convex).
+4. Mapear eventos Stripe → `PaymentConfirmation` (`eventId`, `providerTransactionId`, `status`,
+   `amountCents`, `occurredAt`).
+5. Remover/ocultar UI de tokens mock e o painel de simulação na build de produção.
+6. Configurar `PAYMENT_PROVIDER=stripe` e segredos no deployment.
+
 ## Mocks
 
 Somente desenvolvimento. Não registram dados pessoais.

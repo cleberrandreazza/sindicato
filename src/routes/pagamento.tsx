@@ -1,6 +1,6 @@
 import { createFileRoute, Navigate, useNavigate } from '@tanstack/react-router'
 import { useJourney } from '@/app/providers/journey-context'
-import { PaymentPendingPage } from '@/features/payment/components/payment-pending-page'
+import { PaymentPage } from '@/features/payment/components/payment-page'
 
 export const Route = createFileRoute('/pagamento')({
   component: PaymentRoute,
@@ -17,11 +17,14 @@ function PaymentRoute() {
   if (!journey.operation) return <Navigate to="/resumo" replace />
 
   return (
-    <PaymentPendingPage
+    <PaymentPage
       operation={journey.operation}
-      // Primeiro navega, depois encerra: encerrar antes faria esta rota redirecionar sozinha.
       onFinish={async () => {
         await navigate({ to: '/', replace: true })
+        journey.end()
+      }}
+      onSessionExpired={async () => {
+        await navigate({ to: '/', search: { motivo: 'sessao-expirada' }, replace: true })
         journey.end()
       }}
     />

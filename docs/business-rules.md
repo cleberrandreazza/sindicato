@@ -235,6 +235,32 @@ criada; **não** gera cobrança Pix/cartão).
 após nova identificação; regras de funcionamento das piscinas (ver
 [Data de utilização](#data-de-utilização)).
 
+## Checkout Pix e cartão
+
+Quinta etapa da jornada (rota `/pagamento`). A cobrança usa o `PaymentProvider` (hoje **mock**).
+Confirmação financeira só pelo fluxo autorizado do backend (`providerEvents` /
+`decideConfirmation`), nunca por um `paid: true` do navegador.
+
+**Regras confirmadas:**
+
+- Formas: Pix e cartão. Valores e prazo oficiais vêm da operação já criada.
+- O prazo de 15 minutos começa na **criação da operação**, não na cobrança. Trocar de método ou
+  atualizar a tela não reinicia a contagem.
+- Pix mock: QR e código demonstrativos (não pagáveis). Confirmação via simulação interna
+  (`dev/simulate`), não por endpoint público.
+- Cartão mock: apenas tokens fictícios; nenhum dado real de cartão é coletado ou armazenado.
+- Cobrança `pending` / `succeeded` / `failed` / `canceled` / `expired` é o estado da **tentativa**.
+  Financeiro (`unpaid` / `paid` / `paid_late`) e operacional (`awaiting_payment` / `confirmed` /
+  `expired` / `under_review` / `rejected`) continuam separados.
+- Pagamento aprovado no prazo → confirmação normal. Recusa → nova tentativa no prazo, sem duplicar
+  operação. Pendente → atualizar status. Expirado → mensagem oficial, sem tratar como pago.
+- Pagamento tardio: financeiro `paid_late`, operacional `under_review`; sem liberação automática
+  nem reembolso automático (mensagem de análise).
+- Idempotência da cobrança: repetir `startPayment` reutiliza cobrança pendente da mesma forma
+  (`reused: true`); outra forma com pendente → `payment_method_conflict`.
+
+**Pendente:** Stripe real, webhook HTTP público, comprovante definitivo, textos finais do sindicato.
+
 ## Estados da operação
 
 Detalhes e diagrama em [data-model.md](./data-model.md#estado-financeiro--estado-operacional).

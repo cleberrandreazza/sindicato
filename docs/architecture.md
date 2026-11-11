@@ -205,9 +205,11 @@ oficiais) só em memória e navega para `/pagamento`. Em resultado desconhecido,
 UUID: "Verificar novamente" reenvia a mesma chave. Duplicidade / seleção inválida / data inválida
 orientam a correção sem criar operação. Sessão expirada volta à identificação.
 
-**Etapa 5 (`/pagamento`): intermediária.** Informa que a operação foi criada e que a cobrança
-ainda não está disponível. **Não** chama `startPayment` nem o PaymentProvider. Evolução futura:
-interface de Pix/cartão.
+**Etapa 5 (`/pagamento`): checkout Pix/cartão (mock).** Chama `startPayment` e consulta
+`getOperation` (polling enquanto pendente). Contador visual usa o `expiresAt` da operação (não
+reinicia ao trocar de método). Pix: QR/código demonstrativos; confirmação só via
+`dev/simulate:simulatePayment` (interna). Cartão: tokens `tok_mock_*`, sem dados reais. Nenhum
+endpoint público confirma pagamento. Stripe real: ver integrations.md.
 
 **Regras da interface (a interface não decide regras):**
 
@@ -618,6 +620,9 @@ concorrentes → 1 vencedora), não a serialização real.
     persistir o token no navegador: o servidor deriva o mesmo `accessToken` por HMAC. Após F5 a
     jornada se perde; a duplicidade por reservas ativas impede nova operação incompatível.
     Recuperar a operação pendente após nova identificação é evolução futura.
+26. **Checkout mock sem confirmação no navegador.** A UI só chama `startPayment`/`getOperation`.
+    Simulação de Pix permanece interna (`dev/simulate`); cartão usa tokens opacos. Substituir o
+    mock por Stripe não muda a jornada — só o `PaymentProvider` e o webhook.
 
 ## Ambiente
 

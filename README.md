@@ -4,22 +4,20 @@ Aplicação web pública para pagamento da taxa médica de utilização das pisc
 (R$ 30 por pessoa), sem criação de conta. O associado informa carteirinha e CPF, seleciona as
 pessoas e a data de utilização e paga via Pix ou cartão em até 15 minutos.
 
-> **Estado atual:** backend completo (modelo de dados, criação de operação com prevenção de
-> duplicidade, expiração, confirmação de pagamento, pagamento tardio com análise administrativa,
-> API pública, contratos dos serviços externos e mocks de desenvolvimento) e as **quatro primeiras
-> telas da jornada** (identificação, seleção, data e resumo/criação da operação), com testes
-> automatizados. A etapa de pagamento tem só uma tela intermediária (sem cobrança Pix/cartão).
-> Integrações reais (cadastro do sindicato, Stripe, e-mail/WhatsApp) ainda não existem; o
-> desenvolvimento usa mocks. Este projeto **não** é um sistema geral de reservas.
+> **Estado atual:** backend completo e as **cinco primeiras telas da jornada** (identificação,
+> seleção, data, resumo/criação da operação e checkout Pix/cartão com PaymentProvider **mockado**),
+> com testes automatizados. Nenhum pagamento real é processado. Integrações reais (cadastro do
+> sindicato, Stripe, e-mail/WhatsApp) ainda não existem. Este projeto **não** é um sistema geral
+> de reservas.
 
-| Etapa da jornada      | Situação                                                                      |
-| --------------------- | ----------------------------------------------------------------------------- |
-| 1. Identificação      | Implementada (`/`)                                                            |
-| 2. Seleção de pessoas | Implementada (`/pessoas`); valida a seleção no backend e para antes da data   |
-| 3. Data de utilização | Implementada (`/data`); regra **provisória**: qualquer data de hoje em diante |
-| 4. Resumo             | Implementada (`/resumo`); cria a operação no backend com idempotência         |
-| 5. Pagamento          | Tela intermediária (`/pagamento`); cobrança Pix/cartão ainda não implementada |
-| 6. Comprovante        | Não implementada (backend gera o comprovante; falta a tela e o envio real)    |
+| Etapa da jornada      | Situação                                                                           |
+| --------------------- | ---------------------------------------------------------------------------------- |
+| 1. Identificação      | Implementada (`/`)                                                                 |
+| 2. Seleção de pessoas | Implementada (`/pessoas`); valida a seleção no backend e para antes da data        |
+| 3. Data de utilização | Implementada (`/data`); regra **provisória**: qualquer data de hoje em diante      |
+| 4. Resumo             | Implementada (`/resumo`); cria a operação no backend com idempotência              |
+| 5. Pagamento          | Implementada (`/pagamento`); Pix/cartão **simulados** (mock); Stripe real pendente |
+| 6. Comprovante        | Não implementada (backend gera o comprovante; falta a tela e o envio real)         |
 
 ## Stack
 
@@ -140,6 +138,24 @@ selecionadas e data escolhida. Ao confirmar ("Continuar para pagamento"), o fron
 
 Organização: `src/features/summary/` (`api/`, `lib/`, `hooks/`, `components/`).
 
+### Tela de pagamento (checkout simulado)
+
+A rota `/pagamento` é a quinta etapa ("Finalize seu pagamento"). Exige operação criada em memória
+(`operationId` + `accessToken`).
+
+- **Pix e cartão** usam `public/payments:startPayment` e o `PaymentProvider` mock. O valor e o
+  prazo (`expiresAt`) vêm do backend; trocar de método **não** reinicia os 15 minutos.
+- **Pix:** QR Code e código "copia e cola" demonstrativos (não pagáveis). A confirmação do Pix
+  simulado passa por `dev/simulate:simulatePayment` (função **interna**, CLI/painel) — o navegador
+  **não** pode marcar como pago.
+- **Cartão:** não coleta número/CVV. Só tokens fictícios (`tok_mock_approved` etc.), com rótulos
+  explícitos de simulação.
+- **Estados:** a tela consulta `getOperation` (polling enquanto pendente). Pagamento tardio segue
+  `paid_late` + `under_review` sem liberar utilização.
+- **Stripe real:** ainda não integrado. Ver [docs/integrations.md](docs/integrations.md).
+
+Organização: `src/features/payment/`.
+
 ### Variáveis do backend (deployment Convex)
 
 Ficam no deployment, não no `.env.local`. Para desenvolvimento local:
@@ -222,8 +238,8 @@ src/
     ui/           componentes shadcn/ui
     shared/       componentes reutilizáveis do projeto
     layout/       estrutura das telas da jornada (JourneyLayout)
-  features/       módulos por funcionalidade: identification, selection, usage-date e summary
-                  (prontos); payment (tela intermediária); previstos: pool-payment, receipts, admin
+  features/       módulos por funcionalidade: identification, selection, usage-date, summary e
+                  payment (checkout mock); previstos: receipts, admin
   lib/            utilitários e configuração (cn, env, cliente Convex, with-timeout, public-error)
   services/       adaptadores do frontend (chamadas ao Convex), quando necessário
   types/          tipos compartilhados
