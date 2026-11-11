@@ -19,6 +19,8 @@ interface UsageDatePageProps {
   onUsageDateChange: (usageDate: string | null) => void
   /** Volta à seleção de pessoas, que é preservada. */
   onBack: () => void | Promise<void>
+  /** Data aceita pelo backend: segue para o resumo. */
+  onContinue: () => void | Promise<void>
   /** A prova de identificação não vale mais: pedir nova identificação. */
   onSessionExpired: () => void | Promise<void>
   /** Permite substituir a validação (testes). Em produção usa o backend Convex. */
@@ -50,6 +52,7 @@ export function UsageDatePage({
   usageDate,
   onUsageDateChange,
   onBack,
+  onContinue,
   onSessionExpired,
   check,
   getToday = todayInSaoPaulo,
@@ -150,21 +153,10 @@ export function UsageDatePage({
         <ProvisionalRuleNote />
 
         {isAccepted ? (
-          <div>
-            <Button
-              type="button"
-              size="xl"
-              className="w-full"
-              disabled
-              aria-describedby="next-soon"
-            >
-              <CalendarCheck aria-hidden="true" />
-              Ver o resumo
-            </Button>
-            <p id="next-soon" className="mt-2 text-center text-sm text-muted-foreground">
-              Esta etapa estará disponível em breve.
-            </p>
-          </div>
+          <Button type="button" size="xl" className="w-full" onClick={() => void onContinue()}>
+            <CalendarCheck aria-hidden="true" />
+            Ver o resumo
+          </Button>
         ) : (
           <Button
             type="submit"

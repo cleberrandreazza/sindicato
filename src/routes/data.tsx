@@ -14,6 +14,8 @@ function UsageDateRoute() {
   if (!journey.member) {
     return <Navigate to="/" search={{ motivo: 'identificacao-necessaria' }} replace />
   }
+  // Operação já criada: a seleção e a data não mudam mais nesta jornada.
+  if (journey.operation) return <Navigate to="/pagamento" replace />
   // Sem pessoas escolhidas não há o que datar: volta à seleção.
   if (journey.selectedLinkIds.length === 0) {
     return <Navigate to="/pessoas" replace />
@@ -27,6 +29,7 @@ function UsageDateRoute() {
       onUsageDateChange={journey.setUsageDate}
       // A seleção de pessoas é preservada ao voltar.
       onBack={() => navigate({ to: '/pessoas' })}
+      onContinue={() => navigate({ to: '/resumo' })}
       onSessionExpired={async () => {
         await navigate({ to: '/', search: { motivo: 'sessao-expirada' }, replace: true })
         journey.end()

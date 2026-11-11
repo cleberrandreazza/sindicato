@@ -67,7 +67,7 @@ convex/
     selection.ts      seleção individual por vínculo; duplicidade por personId
     confirmation.ts   decisão sobre notificações de pagamento
     messages.ts       textos exibidos ao associado
-    cpf.ts, privacy.ts
+    cpf.ts, privacy.ts, idempotency.ts
   public/             ÚNICA superfície pública (guardada por teste)
     members.ts        lookup (action), validateSelection (query)
     payments.ts       checkDuplicates (query), createOperation (mutation), getOperation (query),
@@ -100,13 +100,15 @@ tests/                domain/ (puros), convex/ (convex-test) e web/ (interface)
 
 ```text
 src/
-  routes/                 arquivos de rota (TanStack Router): __root, index (/), pessoas (/pessoas), data (/data)
+  routes/                 arquivos de rota (TanStack Router): __root, index (/), pessoas (/pessoas), data (/data), resumo (/resumo), pagamento (/pagamento)
   app/providers/          AppConvexProvider e JourneyProvider (estado da jornada em memória)
   components/layout/      JourneyLayout (faixa azul + folha no mobile; painel dividido no desktop)
   components/ui/          componentes base (button, input, card, alert, text-field…)
   features/identification/  etapa 1: api/ lib/ hooks/ components/
   features/selection/       etapa 2: api/ lib/ hooks/ components/
   features/usage-date/      etapa 3: api/ lib/ hooks/ components/
+  features/summary/         etapa 4: api/ lib/ hooks/ components/ (cria a operação)
+  features/payment/         etapa 5: tela intermediária (sem cobrança ainda)
   lib/                    cliente Convex, env, withTimeout, readPublicError
 ```
 
@@ -194,6 +196,18 @@ sequenceDiagram
   do backend, sem mudar este fluxo.
 - **Privacidade no conflito.** A tela mostra só `name` das pessoas da própria seleção, como o
   backend devolve. O `linkId` não é exibido e nada indica quem é o dono da operação conflitante.
+
+**Etapa 4 (`/resumo`): resumo e criação da operação.**
+
+O associado revisa data, pessoas e valores de referência e confirma. O front chama
+`createOperation` com `requestId`. Em sucesso, guarda a operação (id, token, `expiresAt`, valores
+oficiais) só em memória e navega para `/pagamento`. Em resultado desconhecido, **não** gera outro
+UUID: "Verificar novamente" reenvia a mesma chave. Duplicidade / seleção inválida / data inválida
+orientam a correção sem criar operação. Sessão expirada volta à identificação.
+
+**Etapa 5 (`/pagamento`): intermediária.** Informa que a operação foi criada e que a cobrança
+ainda não está disponível. **Não** chama `startPayment` nem o PaymentProvider. Evolução futura:
+interface de Pix/cartão.
 
 **Regras da interface (a interface não decide regras):**
 
@@ -430,16 +444,32 @@ seleção do próprio titular: não revela o outro titular nem a operação. **�
 
 ### `public/payments:createOperation` (mutation): criação da operação
 
-|                |                                                                                                                                                                                                                           |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Argumentos** | `{ memberId, identificationToken, linkIds, usageDate }`. **Nada mais.**                                                                                                                                                   |
-| **Retorno**    | `{ operationId, accessToken, usageDate, quantity, unitAmountCents, totalAmountCents, expiresAt, people: { name, role }[] }`                                                                                               |
-| **Erros**      | `session_invalid`, `past_usage_date`, `invalid_usage_date`, `empty_selection`, `duplicate_person`, `link_not_found`, `link_inactive`, `member_inactive`, `duplicate_usage` (com `linkIds` e `names`), `too_many_requests` |
+|                |                                                                                                                                                                                                                                                                                                                            |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Argumentos** | `{ memberId, identificationToken, linkIds, usageDate, requestId? }`. **Nada mais.** `requestId` é UUID opcional (idempotência).                                                                                                                                                                                            |
+| **Retorno**    | `{ operationId, accessToken, usageDate, quantity, unitAmountCents, totalAmountCents, expiresAt, people: { name, role }[], reused }`                                                                                                                                                                                        |
+| **Erros**      | `session_invalid`, `past_usage_date`, `invalid_usage_date`, `empty_selection`, `duplicate_person`, `link_not_found`, `link_inactive`, `member_inactive`, `duplicate_usage` (com `linkIds` e `names`), `too_many_requests`, `invalid_request_id`, `request_id_conflict`, `operation_not_recoverable`, `service_unavailable` |
 
 Revalida tudo numa única transação: prova, data, seleção e duplicidade; calcula `quantity`, total
 (R$ 30,00 por pessoa) e `expiresAt = agora + 15 min`; grava operação, pessoas, reservas e o evento
 `created`; agenda a expiração. Qualquer campo extra (`totalAmountCents`, `financialStatus`,
-`expiresAt`...) é recusado pelo validador do Convex. O `accessToken` é devolvido **uma única vez**.
+`expiresAt`...) é recusado pelo validador do Convex.
+
+**Idempotência (`requestId`).** O navegador gera um UUID por tentativa lógica e o reenvia se o
+resultado for desconhecido. O backend guarda só `requestKeyHash` = SHA-256(`memberId` +
+`requestId`) e indexa por `by_member_request`. Repetição com a mesma chave e os **mesmos** dados
+devolve a operação original (`reused: true`) com o **mesmo** `accessToken`, derivado por
+HMAC-SHA256 com `OPERATION_TOKEN_SECRET` (mensagem: `operationId|memberId|requestId`). O segredo
+nunca vai ao navegador; o banco guarda só o hash do token. Mesma chave com outros dados →
+`request_id_conflict`. Chamadas simultâneas com a mesma chave → uma operação (OCC do Convex).
+Sem `requestId`, o token continua aleatório (comportamento original).
+
+**Rotação do segredo.** Copie o valor atual para `OPERATION_TOKEN_SECRET_PREVIOUS` e grave o novo
+em `OPERATION_TOKEN_SECRET`. A repetição testa os segredos em ordem. Após o prazo de todas as
+operações pendentes (15 min), remova `..._PREVIOUS`. Ver `convex/domain/idempotency.ts`.
+
+**Operação recuperada.** Se `reused: true`, o front consulta `getOperation` antes de seguir: a
+operação pode ter expirado ou mudado de estado desde a criação.
 
 ### `public/payments:getOperation` (query): consulta da operação
 
@@ -584,6 +614,10 @@ concorrentes → 1 vencedora), não a serialização real.
     `Date`/instante no navegador; a regra "de hoje em diante" é provisória e reside em
     `UsagePolicy`. A seleção de pessoas e a data são validadas juntas, e mudar a seleção descarta a
     data.
+25. **Idempotência da criação com `requestId` + token derivado.** A repetição segura não exige
+    persistir o token no navegador: o servidor deriva o mesmo `accessToken` por HMAC. Após F5 a
+    jornada se perde; a duplicidade por reservas ativas impede nova operação incompatível.
+    Recuperar a operação pendente após nova identificação é evolução futura.
 
 ## Ambiente
 

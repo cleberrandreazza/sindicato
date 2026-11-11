@@ -40,6 +40,7 @@ interface HarnessProps {
   initialDate?: string | null
   selected?: Id<'householdLinks'>[]
   onBack?: () => void
+  onContinue?: () => void
   onSessionExpired?: () => void
   onDateChange?: (value: string | null) => void
   getToday?: () => string
@@ -50,6 +51,7 @@ function Harness({
   initialDate = null,
   selected = [id('l-holder'), id('l-fernanda')],
   onBack,
+  onContinue,
   onSessionExpired,
   onDateChange,
   getToday,
@@ -65,6 +67,7 @@ function Harness({
         onDateChange?.(value)
       }}
       onBack={onBack ?? (() => {})}
+      onContinue={onContinue ?? (() => {})}
       onSessionExpired={onSessionExpired ?? (() => {})}
       check={check}
       getToday={getToday ?? (() => TODAY)}
@@ -193,8 +196,9 @@ describe('UsageDatePage', () => {
     }
   })
 
-  it('data aceita: mostra o dia por extenso, repete a ressalva e a próxima etapa ainda não existe', async () => {
-    const ui = setup()
+  it('data aceita: mostra o dia por extenso, repete a ressalva e libera o resumo', async () => {
+    const onContinue = vi.fn()
+    const ui = setup({ onContinue })
     ui.pick('2026-11-20')
     await ui.user.click(ui.submit())
 
@@ -205,11 +209,15 @@ describe('UsageDatePage', () => {
     await waitFor(() => expect(document.activeElement).toBe(alert))
 
     const next = screen.getByRole('button', { name: /Ver o resumo/ }) as HTMLButtonElement
-    expect(next.disabled).toBe(true)
-    expect(screen.getByText('Esta etapa estará disponível em breve.')).toBeTruthy()
+    expect(next.disabled).toBe(false)
+    expect(screen.queryByText('Esta etapa estará disponível em breve.')).toBeNull()
     expect(screen.queryByRole('button', { name: /^Continuar/ })).toBeNull()
     // A ressalva provisória continua visível.
     expect(screen.getByTestId('provisional-rule-note')).toBeTruthy()
+
+    expect(onContinue).not.toHaveBeenCalled()
+    await ui.user.click(next)
+    expect(onContinue).toHaveBeenCalledTimes(1)
   })
 
   it('alterar a data depois de aceita descarta o resultado e exige validar de novo', async () => {

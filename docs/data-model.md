@@ -114,18 +114,14 @@ erDiagram
 | Datas: lógica isolada em `domain/time.ts`                                        | Estratégia de fuso documentada e testada; `todayInTimeZone` virou `businessCalendarDate`.                |
 | Códigos de erro `dependent_not_found/inactive` → `link_not_found/inactive`       | Consequência da troca de modelo; mesma regra (vínculo inexistente ou inativo é recusado).                |
 
-### Telas de identificação, seleção e data (frontend)
+### Telas da jornada (frontend)
 
-**Nenhuma mudança de schema, índice ou tabela.** As três primeiras telas só leem o que já existe
-(`members`, `people`, `householdLinks`, `identificationSessions`, `operationPeople` para
-conflitos) pelas funções públicas `members:lookup`, `members:validateSelection` e
-`payments:checkDuplicates`. A seleção e a data feitas na tela **não são persistidas**: só viram
-dado (`operationPeople`, `paymentOperations.usageDate`) quando a operação é criada, em etapa
-futura. O navegador identifica cada pessoa pelo id do vínculo (`householdLinks`), nunca pelo
-`personId`. A data segue como `usageDate` (`YYYY-MM-DD`, ver
-[Datas e fuso horário](#datas-e-fuso-horário)), sem conversão. Tabelas e regras de data
-continuam as mesmas; a aceitação de "qualquer data de hoje em diante" é provisória
-(ver [business-rules.md](./business-rules.md#data-de-utilização)).
+As quatro primeiras telas usam as funções públicas existentes. A etapa 4 **cria** a operação
+(`payments:createOperation`) e passou a preencher `requestKeyHash` (opcional) + índice
+`by_member_request` para idempotência. Seleção e data **só** viram dado persistido na criação.
+O navegador identifica pessoas por `linkId`, nunca por `personId`. A data é `YYYY-MM-DD` sem
+conversão. Nada da jornada (nem `accessToken`) vai para `localStorage` / `sessionStorage` /
+cookie / URL. Ver [business-rules.md](./business-rules.md#resumo-e-criação-da-operação).
 
 ## Estado financeiro × estado operacional
 
@@ -193,19 +189,21 @@ prefixo).
 
 ### `paymentOperations`
 
-| Campo                                  | Observação                                                                 |
-| -------------------------------------- | -------------------------------------------------------------------------- |
-| `memberId`                             | Titular que iniciou a operação.                                            |
-| `usageDate`                            | `YYYY-MM-DD`, obrigatória, nunca no passado.                               |
-| `quantity`                             | Número de pessoas (= linhas de `operationPeople`).                         |
-| `unitAmountCents`, `totalAmountCents`  | Calculados no backend: `total = quantity × unit`. Padrão: 3000 por pessoa. |
-| `expiresAt`                            | `createdAt + 15 min`.                                                      |
-| `financialStatus`, `operationalStatus` | Ver acima.                                                                 |
-| `paidAt`                               | Instante do recebimento informado pelo provedor (`occurredAt`).            |
-| `accessTokenHash`                      | SHA-256 do token entregue ao navegador.                                    |
-| `updatedAt`                            |                                                                            |
+| Campo                                  | Observação                                                                             |
+| -------------------------------------- | -------------------------------------------------------------------------------------- |
+| `memberId`                             | Titular que iniciou a operação.                                                        |
+| `usageDate`                            | `YYYY-MM-DD`, obrigatória, nunca no passado.                                           |
+| `quantity`                             | Número de pessoas (= linhas de `operationPeople`).                                     |
+| `unitAmountCents`, `totalAmountCents`  | Calculados no backend: `total = quantity × unit`. Padrão: 3000 por pessoa.             |
+| `expiresAt`                            | `createdAt + 15 min`.                                                                  |
+| `financialStatus`, `operationalStatus` | Ver acima.                                                                             |
+| `paidAt`                               | Instante do recebimento informado pelo provedor (`occurredAt`).                        |
+| `accessTokenHash`                      | SHA-256 do token entregue ao navegador (nunca o token em claro).                       |
+| `requestKeyHash` (opcional)            | SHA-256 de `memberId` + `requestId` (idempotência). Ausente se criado sem `requestId`. |
+| `updatedAt`                            |                                                                                        |
 
-Índice: `by_member`.
+Índices: `by_member`; `by_member_request` (`memberId`, `requestKeyHash`) — localiza a operação
+da mesma solicitação para devolvê-la na repetição, na mesma transação da criação.
 
 ### `operationPeople`
 

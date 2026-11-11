@@ -212,13 +212,15 @@ Erros: `simulation_disabled`, `no_charge_for_operation`.
 
 Variáveis do **deployment Convex** (não do `.env.local`):
 
-| Variável                | Valores                   | Observação                                                      |
-| ----------------------- | ------------------------- | --------------------------------------------------------------- |
-| `APP_ENV`               | `development`             | Sem isso, mocks são **recusados** e nada é assumido por padrão. |
-| `MEMBER_PROVIDER`       | `mock`                    | Em `development`, o padrão é `mock`.                            |
-| `PAYMENT_PROVIDER`      | `mock` (futuro: `stripe`) | idem                                                            |
-| `NOTIFICATION_PROVIDER` | `mock`                    | idem                                                            |
-| `CPF_HASH_SECRET`       | string ≥ 16 chars         | Segredo do HMAC do CPF (`domain/privacy.ts`).                   |
+| Variável                          | Valores                      | Observação                                                                                                                                                  |
+| --------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_ENV`                         | `development`                | Sem isso, mocks são **recusados** e nada é assumido por padrão.                                                                                             |
+| `MEMBER_PROVIDER`                 | `mock`                       | Em `development`, o padrão é `mock`.                                                                                                                        |
+| `PAYMENT_PROVIDER`                | `mock` (futuro: `stripe`)    | idem                                                                                                                                                        |
+| `NOTIFICATION_PROVIDER`           | `mock`                       | idem                                                                                                                                                        |
+| `CPF_HASH_SECRET`                 | string ≥ 16 chars            | Segredo do HMAC do CPF (`domain/privacy.ts`).                                                                                                               |
+| `OPERATION_TOKEN_SECRET`          | string ≥ 32 chars            | Deriva o `accessToken` quando `createOperation` usa `requestId` (`domain/idempotency.ts`). Sem ele, criação com `requestId` responde `service_unavailable`. |
+| `OPERATION_TOKEN_SECRET_PREVIOUS` | string ≥ 32 chars (opcional) | Segredo anterior durante a rotação; a repetição testa os dois.                                                                                              |
 
 Para adicionar uma integração real:
 

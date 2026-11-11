@@ -260,10 +260,14 @@ export const MOCK = {
   igor: { membershipNumber: '900004', cpf: '90000000418' }, // INATIVO
 } as const
 
+/** Segredo de derivação do token de acesso (≥ 32 caracteres), só para testes. */
+export const TEST_TOKEN_SECRET = 'segredo-de-token-de-teste-com-mais-de-32-caracteres'
+
 /** Configura o ambiente do deployment simulado (providers mock + segredo do HMAC do CPF). */
 export function stubPublicApiEnv() {
   vi.stubEnv('APP_ENV', 'development')
   vi.stubEnv('CPF_HASH_SECRET', 'segredo-de-teste-com-mais-de-16-chars')
+  vi.stubEnv('OPERATION_TOKEN_SECRET', TEST_TOKEN_SECRET)
   vi.stubEnv('MEMBER_PROVIDER', 'mock')
   vi.stubEnv('PAYMENT_PROVIDER', 'mock')
   vi.stubEnv('NOTIFICATION_PROVIDER', 'mock')
@@ -289,13 +293,14 @@ export function publicCreate(
   t: Backend,
   fixture: Fixture,
   token: string,
-  options: { usageDate?: string; linkIds?: Id<'householdLinks'>[] } = {},
+  options: { usageDate?: string; linkIds?: Id<'householdLinks'>[]; requestId?: string } = {},
 ) {
   return t.mutation(api.public.payments.createOperation, {
     memberId: fixture.memberId,
     identificationToken: token,
     usageDate: options.usageDate ?? USAGE_DATE,
     linkIds: options.linkIds ?? [fixture.holderLinkId, fixture.dependentLinkIds[0]],
+    ...(options.requestId !== undefined ? { requestId: options.requestId } : {}),
   })
 }
 

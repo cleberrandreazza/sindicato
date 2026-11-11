@@ -8,6 +8,7 @@ import {
   MAX_PAYMENT_TOKEN_LENGTH,
 } from '../domain/limits'
 import type { OperationPresentation } from '../domain/messages'
+import { hashRequestKey, isValidRequestId, readTokenSecrets } from '../domain/idempotency'
 import { hashAccessToken } from '../domain/privacy'
 import { publicError, publicMessage, type PublicErrorCode } from '../domain/publicErrors'
 import { paymentMethod } from '../domain/statuses'
@@ -27,7 +28,11 @@ import {
   type PaymentView,
   type StartPaymentResult,
 } from '../payments/chargeView'
-import { createOperationCore } from '../payments/operations'
+import {
+  createOperationCore,
+  findOperationByRequest,
+  replayOperation,
+} from '../payments/operations'
 import { ProviderError } from '../providers/errors'
 import type { CardCharge, PixCharge } from '../providers/paymentProvider'
 import { getPaymentProvider } from '../providers/registry'
@@ -102,6 +107,12 @@ export interface CreateOperationResult {
   /** Instante (UTC, ms) em que o prazo de pagamento termina. */
   expiresAt: number
   people: { name: string; role: HouseholdRole }[]
+  /**
+   * `true` quando esta chamada repetiu uma solicitação já atendida (mesmo `requestId`) e devolveu
+   * a operação ORIGINAL, com o mesmo `accessToken`. O estado é o da criação: consulte
+   * `getOperation` para o estado oficial.
+   */
+  reused: boolean
 }
 
 /**
@@ -113,11 +124,43 @@ export interface CreateOperationResult {
  * Duplicidade com operações simultâneas: a verificação e a inserção das reservas ocorrem nesta
  * mesma mutation, que é uma transação serializável com controle otimista de concorrência
  * (ver docs/business-rules.md).
+ *
+ * IDEMPOTÊNCIA (`requestId` opcional, UUID gerado pelo navegador por tentativa de confirmação):
+ * a repetição da MESMA solicitação (mesmo associado, mesmo `requestId`, mesmos dados) não cria
+ * outra operação: devolve a original, com o mesmo `accessToken` (derivado por HMAC) e
+ * `reused: true`. A consulta da chave e a inserção ocorrem nesta mesma transação; chamadas
+ * simultâneas com a mesma chave resultam em uma única operação. O mesmo `requestId` com outros
+ * dados é recusado (`request_id_conflict`). Sem `requestId` o comportamento é o original.
+ * Só o hash da chave e o hash do token são guardados.
  */
 export const createOperation = mutation({
-  args: { ...selectionArgs, usageDate: v.string() },
+  args: { ...selectionArgs, usageDate: v.string(), requestId: v.optional(v.string()) },
   handler: async (ctx, args): Promise<CreateOperationResult> => {
     await requireSession(ctx, args.memberId, args.identificationToken)
+
+    let request: { requestId: string; requestKeyHash: string; secret: string } | undefined
+    if (args.requestId !== undefined) {
+      if (!isValidRequestId(args.requestId)) throw publicError('invalid_request_id')
+      const secrets = readTokenSecrets(process.env)
+      if (secrets.length === 0) {
+        console.error('createOperation: OPERATION_TOKEN_SECRET ausente ou curto')
+        throw publicError('service_unavailable')
+      }
+      const requestKeyHash = await hashRequestKey(args.memberId, args.requestId)
+
+      // Repetição: devolve a original, sem passar pelo limite de criações nem pela duplicidade
+      // (a própria operação original é quem reserva as pessoas).
+      const existing = await findOperationByRequest(ctx, args.memberId, requestKeyHash)
+      if (existing) {
+        return await replayOperation(ctx, existing, {
+          memberId: args.memberId,
+          usageDate: args.usageDate,
+          linkIds: args.linkIds,
+          request: { requestId: args.requestId, secrets },
+        })
+      }
+      request = { requestId: args.requestId, requestKeyHash, secret: secrets[0]! }
+    }
 
     // Proteção contra abuso: limite de operações criadas por titular. O contador só avança
     // quando a criação termina com sucesso (um erro desfaz a transação).
@@ -134,6 +177,7 @@ export const createOperation = mutation({
       memberId: args.memberId,
       usageDate: args.usageDate,
       linkIds: args.linkIds,
+      ...(request ? { request } : {}),
     })
     await recordRateLimitHit(ctx, key, CREATE_OPERATION_WINDOW_MS, now)
     return created

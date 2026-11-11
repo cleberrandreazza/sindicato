@@ -55,3 +55,10 @@ export function formatUsageDate(value: string): string {
   const [year, month, day] = value.split('-').map(Number) as [number, number, number]
   return LONG_DATE.format(new Date(Date.UTC(year, month - 1, day)))
 }
+
+/** `2026-11-20` → `20/11/2026` (padrão brasileiro), só rearranjando o texto: sem `Date`. */
+export function formatUsageDateBR(value: string): string {
+  if (!isValidIsoDate(value)) return value
+  const [year, month, day] = value.split('-') as [string, string, string]
+  return `${day}/${month}/${year}`
+}

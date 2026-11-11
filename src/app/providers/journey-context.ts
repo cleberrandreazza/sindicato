@@ -1,6 +1,10 @@
 import { createContext, useContext } from 'react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import type { IdentifiedMember } from '@/features/identification/lib/lookup-outcome'
+import type {
+  ConfirmationRequest,
+  CreatedOperation,
+} from '@/features/summary/lib/created-operation'
 
 /**
  * Estado da jornada do associado ENQUANTO a aba estiver aberta: quem se identificou (incluindo a
@@ -18,7 +22,17 @@ export interface JourneyContextValue {
    * backend, a cada validação.
    */
   usageDate: string | null
-  /** Inicia a jornada com um novo associado identificado (descarta seleção e data anteriores). */
+  /**
+   * Tentativa lógica de confirmação em andamento (`requestId` + dados a que se refere). Mantém a
+   * MESMA chave enquanto o resultado da criação for desconhecido, para repetir sem duplicar.
+   */
+  confirmRequest: ConfirmationRequest | null
+  /**
+   * Operação que o backend criou (ou recuperou), com valores e prazo oficiais e a credencial
+   * dela. Só em memória.
+   */
+  operation: CreatedOperation | null
+  /** Inicia a jornada com um novo associado identificado (descarta tudo o que havia da jornada anterior). */
   begin: (member: IdentifiedMember) => void
   /**
    * Altera a seleção de pessoas. Uma seleção DIFERENTE da atual descarta a data escolhida: a data
@@ -26,6 +40,8 @@ export interface JourneyContextValue {
    */
   setSelectedLinkIds: (linkIds: readonly Id<'householdLinks'>[]) => void
   setUsageDate: (usageDate: string | null) => void
+  setConfirmRequest: (request: ConfirmationRequest | null) => void
+  setOperation: (operation: CreatedOperation | null) => void
   /** Encerra a jornada e esquece a prova de identificação. */
   end: () => void
 }

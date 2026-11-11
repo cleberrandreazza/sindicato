@@ -102,8 +102,15 @@ export default defineSchema({
     paidAt: v.optional(v.number()),
     /** SHA-256 do token entregue ao navegador para acompanhar a operação. */
     accessTokenHash: v.string(),
+    /**
+     * SHA-256 de `memberId` + `requestId` (idempotência de `createOperation`). Nunca o
+     * `requestId` em si. Ausente em operações criadas sem `requestId`.
+     */
+    requestKeyHash: v.optional(v.string()),
     updatedAt: v.number(),
-  }).index('by_member', ['memberId']),
+  })
+    .index('by_member', ['memberId'])
+    .index('by_member_request', ['memberId', 'requestKeyHash']),
 
   /**
    * Uma linha por pessoa selecionada. Serve de snapshot da seleção e de "reserva" por

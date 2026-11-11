@@ -15,6 +15,9 @@ function SelectionRoute() {
     return <Navigate to="/" search={{ motivo: 'identificacao-necessaria' }} replace />
   }
 
+  // Operação já criada: a seleção não muda mais nesta jornada.
+  if (journey.operation) return <Navigate to="/pagamento" replace />
+
   return (
     <SelectionPage
       member={journey.member}

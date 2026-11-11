@@ -30,6 +30,12 @@ export const PUBLIC_ERROR_MESSAGES = {
   duplicate_usage:
     'Já existe um pagamento ou uma cobrança em andamento para uma das pessoas nesta data.',
   too_many_requests: 'Muitas solicitações em pouco tempo. Aguarde alguns minutos.',
+  // Idempotência da criação da operação
+  invalid_request_id: 'Não foi possível identificar esta solicitação. Tente novamente.',
+  request_id_conflict:
+    'Esta solicitação já foi usada com outros dados. Revise as informações e tente novamente.',
+  operation_not_recoverable:
+    'Não foi possível recuperar a operação criada anteriormente. Aguarde alguns minutos e tente novamente.',
   // Consulta de operação: mesma resposta para inexistente e para credencial incorreta.
   operation_not_found: 'Operação não encontrada.',
   // Cobrança (`public/payments:startPayment`)

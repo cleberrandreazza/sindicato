@@ -186,13 +186,54 @@ seleção (marcar, desmarcar ou trocar alguém) **descarta a data** e o resultad
 Reenviar a mesma seleção não descarta. Mudar a data descarta o resultado da validação anterior, e
 o resultado só é exibido para a data para a qual foi obtido.
 
-**Não faz parte desta etapa:** resumo final, criação da operação e pagamento. Depois de aceita, o
-botão "Ver o resumo" aparece desabilitado com "Esta etapa estará disponível em breve."
+**Próxima etapa:** após a data aceita, a jornada segue para o
+[resumo e criação da operação](#resumo-e-criação-da-operação). A cobrança Pix/cartão ainda não
+existe (tela intermediária em `/pagamento`).
 
 **Ainda pendente do sindicato** (nada foi inventado; ver [regras pendentes](#regras-pendentes)):
 dias e horários de funcionamento, antecedência mínima e máxima, feriados e datas excepcionais,
 períodos de fechamento e confirmação do fuso `America/Sao_Paulo`. Quando existirem, entram na
 `UsagePolicy` (backend) e a tela passa a mostrar as datas indisponíveis a partir da resposta dele.
+
+## Resumo e criação da operação
+
+Quarta etapa da jornada (tela "Revise sua operação", rota `/resumo`). A interface fica em
+`src/features/summary/`; a criação é a mutation pública `public/payments:createOperation`
+(regra única em `createOperationCore`).
+
+**Regras confirmadas (aplicadas hoje):**
+
+- **Revisão obrigatória.** O associado vê data, pessoas (nome e vínculo), quantidade, valor
+  unitário de referência (R$ 30,00) e total estimado **antes** de confirmar.
+- **Revalidação no servidor.** Ao confirmar, o backend revalida prova de identificação, titular,
+  seleção, elegibilidade, data e duplicidade. O `JourneyProvider` é só memória temporária: **não**
+  é autoridade. Dados inválidos ou desatualizados → a operação **não** é criada; a tela mostra
+  mensagem amigável e permite corrigir (pessoas ou data), preservando a jornada quando seguro.
+- **Valores só no servidor.** O navegador não envia valores. Quantidade, unitário e total são
+  calculados e persistidos pelo backend (`calculateOperationAmounts` + `UsagePolicy`).
+- **Prazo de 15 minutos.** Começa **exclusivamente** no instante em que a operação é criada
+  (`expiresAt = agora + 15 min`, calculado no servidor). Abrir o resumo, escolher a data ou
+  identificar-se **não** inicia a contagem.
+- **Idempotência (`requestId`).** Cada tentativa lógica de confirmação gera um UUID em memória. Em
+  timeout ou falha de comunicação, a **mesma** chave é reenviada; o backend devolve a operação
+  original (`reused: true`) com o mesmo `accessToken` (HMAC derivado). Clique duplo e chamadas
+  simultâneas com a mesma chave resultam em **uma** operação. A mesma chave com outros dados é
+  recusada (`request_id_conflict`). Sem `requestId` o comportamento antigo permanece.
+- **Duplicidade.** Se já existe operação pendente/paga/em análise para alguma pessoa da seleção na
+  data, a criação é recusada (`duplicate_usage`) com os nomes devolvidos pelo backend. Isso também
+  cobre o caso de F5: a jornada em memória se perde; após nova identificação, tentar criar de novo
+  esbarra na operação pendente — mensagem amigável, sem sugerir que o pagamento foi feito.
+- **Sem persistência no navegador.** Nada em `localStorage`, `sessionStorage`, cookie ou URL.
+  Após F5 o associado se identifica de novo. A recuperação automática da operação após nova
+  identificação é **evolução futura** (fora do escopo desta etapa).
+
+**Após a criação.** A jornada guarda em memória `operationId`, `accessToken`, valores e
+`expiresAt` oficiais e navega para `/pagamento` (tela intermediária: informa que a operação foi
+criada; **não** gera cobrança Pix/cartão).
+
+**Ainda pendente / evolução futura:** interface real de pagamento; recuperação da operação pendente
+após nova identificação; regras de funcionamento das piscinas (ver
+[Data de utilização](#data-de-utilização)).
 
 ## Estados da operação
 

@@ -1,7 +1,9 @@
 import { v } from 'convex/values'
 import { internal } from '../_generated/api'
 import type { Id } from '../_generated/dataModel'
+import type { Doc } from '../_generated/dataModel'
 import { internalMutation, type MutationCtx } from '../_generated/server'
+import { deriveAccessToken } from '../domain/idempotency'
 import { generateAccessToken, hashAccessToken } from '../domain/privacy'
 import { publicError } from '../domain/publicErrors'
 import {
@@ -33,6 +35,13 @@ export async function createOperationCore(
     memberId: Id<'members'>
     usageDate: string
     linkIds: readonly Id<'householdLinks'>[]
+    /**
+     * Idempotência (opcional). Quando presente, a operação guarda `requestKeyHash` e o token de
+     * acesso é DERIVADO (HMAC) em vez de aleatório, para poder ser devolvido de novo na repetição
+     * da mesma solicitação. Quem chama já verificou, NA MESMA transação, que não existe operação
+     * para esta chave (ver `findOperationByRequest`).
+     */
+    request?: { requestId: string; requestKeyHash: string; secret: string }
   },
 ) {
   const now = Date.now()
@@ -55,7 +64,9 @@ export async function createOperationCore(
   }
 
   const amounts = calculateOperationAmounts(people.length, policy.unitAmountCents(args.usageDate))
-  const accessToken = generateAccessToken()
+  // Sem `requestId` o token é aleatório (comportamento original). Com `requestId` é recalculado
+  // abaixo, quando o id da operação já existe, e substitui o hash provisório.
+  let accessToken = generateAccessToken()
   const expiresAt = calculateExpiresAt(now)
 
   const operationId = await ctx.db.insert('paymentOperations', {
@@ -68,8 +79,18 @@ export async function createOperationCore(
     financialStatus: 'unpaid',
     operationalStatus: 'awaiting_payment',
     accessTokenHash: await hashAccessToken(accessToken),
+    ...(args.request ? { requestKeyHash: args.request.requestKeyHash } : {}),
     updatedAt: now,
   })
+
+  if (args.request) {
+    accessToken = await deriveAccessToken(args.request.secret, {
+      operationId,
+      memberId: member._id,
+      requestId: args.request.requestId,
+    })
+    await ctx.db.patch(operationId, { accessTokenHash: await hashAccessToken(accessToken) })
+  }
 
   for (const person of people) {
     await ctx.db.insert('operationPeople', {
@@ -104,7 +125,83 @@ export async function createOperationCore(
     totalAmountCents: amounts.totalAmountCents,
     expiresAt,
     people: people.map((person) => ({ name: person.name, role: person.role })),
+    reused: false as boolean,
   }
+}
+
+/**
+ * Operação já criada para esta solicitação (mesmo associado e mesmo `requestId`), se houver. A
+ * leitura do índice entra no conjunto de leitura da transação: se outra criação com a mesma
+ * chave confirmar antes, o Convex reexecuta esta mutation, que então a encontra e a reutiliza.
+ */
+export async function findOperationByRequest(
+  ctx: MutationCtx,
+  memberId: Id<'members'>,
+  requestKeyHash: string,
+): Promise<Doc<'paymentOperations'> | null> {
+  return await ctx.db
+    .query('paymentOperations')
+    .withIndex('by_member_request', (q) =>
+      q.eq('memberId', memberId).eq('requestKeyHash', requestKeyHash),
+    )
+    .first()
+}
+
+/**
+ * Repetição da mesma solicitação: devolve a operação ORIGINAL (`reused: true`) com o mesmo token.
+ * Não cria nada, não mexe em reservas nem no limite de criações.
+ *
+ * - A chave só vale para os mesmos dados (data e conjunto de vínculos); outros dados com a mesma
+ *   chave são recusados (`request_id_conflict`).
+ * - O token é recalculado e conferido com o hash guardado, testando os segredos em ordem (rotação).
+ *   Se nenhum confere, não se devolve token algum (`operation_not_recoverable`).
+ * - O estado devolvido é o da criação; o chamador deve consultar `getOperation` para o estado
+ *   oficial (a operação pode ter expirado ou sido paga).
+ */
+export async function replayOperation(
+  ctx: MutationCtx,
+  existing: Doc<'paymentOperations'>,
+  args: {
+    memberId: Id<'members'>
+    usageDate: string
+    linkIds: readonly Id<'householdLinks'>[]
+    request: { requestId: string; secrets: readonly string[] }
+  },
+) {
+  const stored = await ctx.db
+    .query('operationPeople')
+    .withIndex('by_operation', (q) => q.eq('operationId', existing._id))
+    .collect()
+
+  const sameDate = existing.usageDate === args.usageDate
+  const storedLinks = new Set<string>(stored.map((person) => person.linkId))
+  const requestedLinks = new Set<string>(args.linkIds)
+  const sameLinks =
+    storedLinks.size === requestedLinks.size &&
+    [...requestedLinks].every((linkId) => storedLinks.has(linkId))
+  if (!sameDate || !sameLinks) throw publicError('request_id_conflict')
+
+  for (const secret of args.request.secrets) {
+    const token = await deriveAccessToken(secret, {
+      operationId: existing._id,
+      memberId: existing.memberId,
+      requestId: args.request.requestId,
+    })
+    if ((await hashAccessToken(token)) === existing.accessTokenHash) {
+      return {
+        operationId: existing._id,
+        accessToken: token,
+        usageDate: existing.usageDate,
+        quantity: existing.quantity,
+        unitAmountCents: existing.unitAmountCents,
+        totalAmountCents: existing.totalAmountCents,
+        expiresAt: existing.expiresAt,
+        people: stored.map((person) => ({ name: person.name, role: person.role })),
+        reused: true as boolean,
+      }
+    }
+  }
+  throw publicError('operation_not_recoverable')
 }
 
 /** Versão interna (usada por testes e por futuras rotinas do servidor). */

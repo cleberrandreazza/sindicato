@@ -6,18 +6,19 @@ pessoas e a data de utilização e paga via Pix ou cartão em até 15 minutos.
 
 > **Estado atual:** backend completo (modelo de dados, criação de operação com prevenção de
 > duplicidade, expiração, confirmação de pagamento, pagamento tardio com análise administrativa,
-> API pública, contratos dos serviços externos e mocks de desenvolvimento) e as **duas primeiras
-> telas da jornada** (identificação e seleção de pessoas), com testes automatizados. Integrações
-> reais (cadastro do sindicato, Stripe, e-mail/WhatsApp) ainda não existem; o desenvolvimento usa
-> mocks. Este projeto **não** é um sistema geral de reservas.
+> API pública, contratos dos serviços externos e mocks de desenvolvimento) e as **quatro primeiras
+> telas da jornada** (identificação, seleção, data e resumo/criação da operação), com testes
+> automatizados. A etapa de pagamento tem só uma tela intermediária (sem cobrança Pix/cartão).
+> Integrações reais (cadastro do sindicato, Stripe, e-mail/WhatsApp) ainda não existem; o
+> desenvolvimento usa mocks. Este projeto **não** é um sistema geral de reservas.
 
 | Etapa da jornada      | Situação                                                                      |
 | --------------------- | ----------------------------------------------------------------------------- |
 | 1. Identificação      | Implementada (`/`)                                                            |
 | 2. Seleção de pessoas | Implementada (`/pessoas`); valida a seleção no backend e para antes da data   |
 | 3. Data de utilização | Implementada (`/data`); regra **provisória**: qualquer data de hoje em diante |
-| 4. Resumo             | Não implementada                                                              |
-| 5. Pagamento          | Não implementada (backend pronto: `startPayment`, `getOperation`)             |
+| 4. Resumo             | Implementada (`/resumo`); cria a operação no backend com idempotência         |
+| 5. Pagamento          | Tela intermediária (`/pagamento`); cobrança Pix/cartão ainda não implementada |
 | 6. Comprovante        | Não implementada (backend gera o comprovante; falta a tela e o envio real)    |
 
 ## Stack
@@ -26,7 +27,7 @@ React · TypeScript (strict) · Vite · TanStack Router · Tailwind CSS v4 · sh
 
 ## Documentação
 
-- [Regras de negócio](docs/business-rules.md) (confirmadas, pendentes, seleção de pessoas, estados, pagamento tardio, duplicidade, mensagens)
+- [Regras de negócio](docs/business-rules.md) (confirmadas, pendentes, seleção, data, resumo/operação, estados, pagamento tardio, duplicidade, mensagens)
 - [Arquitetura](docs/architecture.md)
 - [Modelo de dados](docs/data-model.md)
 - [Integrações externas](docs/integrations.md)
@@ -117,6 +118,28 @@ identificado e pessoas selecionadas (senão volta para `/` ou `/pessoas`).
 
 Organização: `src/features/usage-date/` (`api/`, `lib/`, `hooks/`, `components/`).
 
+### Tela de resumo e criação da operação
+
+A rota `/resumo` é a quarta etapa ("Revise sua operação"). Exige associado identificado, pessoas
+selecionadas e data escolhida. Ao confirmar ("Continuar para pagamento"), o frontend chama
+`public/payments:createOperation` — **única autoridade** sobre valores, prazo e elegibilidade.
+
+- **Valores:** o resumo mostra R$ 30,00 por pessoa como referência; o total oficial vem na resposta
+  do backend. O navegador **nunca** envia valores.
+- **Prazo:** os 15 minutos começam **somente** quando a operação é criada no servidor
+  (`expiresAt` na resposta). Abrir o resumo não inicia a contagem.
+- **Idempotência:** cada tentativa lógica gera um `requestId` (UUID) em memória. Em timeout ou
+  falha de comunicação, a mesma chave é reenviada; o backend devolve a operação original
+  (`reused: true`) com o mesmo `accessToken` (derivado por HMAC). Não há `localStorage` /
+  `sessionStorage` / cookie / URL. Após F5 a jornada se perde; se já houver operação pendente,
+  uma nova tentativa incompatível é recusada com mensagem amigável (`duplicate_usage`).
+- **Segredo do deployment:** `OPERATION_TOKEN_SECRET` (≥ 32 caracteres) é obrigatório para
+  criar com `requestId`. Ver variáveis abaixo.
+- **Próxima etapa:** `/pagamento` informa que a operação foi criada e que a cobrança ainda não
+  está disponível (não chama o PaymentProvider).
+
+Organização: `src/features/summary/` (`api/`, `lib/`, `hooks/`, `components/`).
+
 ### Variáveis do backend (deployment Convex)
 
 Ficam no deployment, não no `.env.local`. Para desenvolvimento local:
@@ -124,7 +147,13 @@ Ficam no deployment, não no `.env.local`. Para desenvolvimento local:
 ```bash
 pnpm exec convex env set APP_ENV development
 pnpm exec convex env set CPF_HASH_SECRET "$(node -e 'console.log(require("crypto").randomBytes(24).toString("hex"))')"
+pnpm exec convex env set OPERATION_TOKEN_SECRET "$(node -e 'console.log(require("crypto").randomBytes(32).toString("hex"))')"
 ```
+
+`OPERATION_TOKEN_SECRET` (≥ 32 caracteres) deriva o `accessToken` quando a criação usa
+`requestId` (idempotência). Para rotacionar: copie o valor atual para
+`OPERATION_TOKEN_SECRET_PREVIOUS` e grave o novo em `OPERATION_TOKEN_SECRET`. Detalhes em
+[docs/architecture.md](docs/architecture.md).
 
 Com `APP_ENV=development`, os providers usam mocks por padrão. Sem essa variável, mocks são
 recusados (proteção contra uso acidental em produção). Detalhes em
@@ -193,8 +222,8 @@ src/
     ui/           componentes shadcn/ui
     shared/       componentes reutilizáveis do projeto
     layout/       estrutura das telas da jornada (JourneyLayout)
-  features/       módulos por funcionalidade: identification, selection e usage-date (prontos);
-                  previstos: summary, pool-payment, payment-status, receipts, admin
+  features/       módulos por funcionalidade: identification, selection, usage-date e summary
+                  (prontos); payment (tela intermediária); previstos: pool-payment, receipts, admin
   lib/            utilitários e configuração (cn, env, cliente Convex, with-timeout, public-error)
   services/       adaptadores do frontend (chamadas ao Convex), quando necessário
   types/          tipos compartilhados
