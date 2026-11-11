@@ -3,15 +3,22 @@ import { useIdentification } from '../hooks/use-identification'
 import type { LookupFn } from '../api/lookup-member'
 import { IdentificationForm } from './identification-form'
 import { IdentificationNotice } from './identification-notice'
+import { IdentificationReturnNotice } from './identification-return-notice'
+import type { ReturnReason } from '../lib/return-reason'
 import { IdentifiedResult, InactiveResult } from './identification-result'
+import type { IdentifiedMember } from '../lib/lookup-outcome'
 
 interface IdentificationPageProps {
+  /** Segue para a próxima etapa com o associado identificado. */
+  onContinue: (member: IdentifiedMember) => void
+  /** Motivo de o associado ter voltado a esta tela (ex.: identificação expirada). */
+  returnReason?: ReturnReason
   /** Permite substituir a consulta (testes). Em produção usa o backend Convex. */
   lookup?: LookupFn
 }
 
 /** Primeira tela da jornada: identificação do associado por carteirinha e CPF. */
-export function IdentificationPage({ lookup }: IdentificationPageProps) {
+export function IdentificationPage({ lookup, onContinue, returnReason }: IdentificationPageProps) {
   const { state, submit, retry, reset } = useIdentification(lookup)
 
   return (
@@ -21,7 +28,7 @@ export function IdentificationPage({ lookup }: IdentificationPageProps) {
       description="Informe os dados da sua carteirinha para começar o pagamento."
     >
       {state.status === 'identified' ? (
-        <IdentifiedResult member={state.member} onStartOver={reset} />
+        <IdentifiedResult member={state.member} onContinue={onContinue} onStartOver={reset} />
       ) : state.status === 'inactive' ? (
         <InactiveResult
           membershipNumber={state.membershipNumber}
@@ -34,6 +41,10 @@ export function IdentificationPage({ lookup }: IdentificationPageProps) {
           <p className="mt-2 mb-6 text-base text-muted-foreground">
             Use o número da carteirinha e o CPF do titular.
           </p>
+
+          {returnReason && state.status === 'idle' ? (
+            <IdentificationReturnNotice reason={returnReason} />
+          ) : null}
 
           {state.status === 'not_found' ||
           state.status === 'rate_limited' ||

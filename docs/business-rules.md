@@ -11,6 +11,8 @@ disponibilidade, lotação ou outros espaços).
 - Acesso público; identificação por número da carteirinha e CPF.
 - Titular e dependentes são apresentados individualmente e selecionados um a um.
 - O titular **não** é obrigatório. Convidados não são permitidos.
+- Nenhuma pessoa vem pré-selecionada (nem o titular). Detalhes em
+  [Seleção de pessoas](#seleção-de-pessoas).
 
 **Cobrança**
 
@@ -37,17 +39,21 @@ disponibilidade, lotação ou outros espaços).
 O sindicato ainda não forneceu as regras abaixo. **Nenhuma foi inventada**: o comportamento atual
 é o mais neutro possível e a arquitetura permite configurá-las depois.
 
-| Regra pendente                       | Comportamento atual                                                          |
-| ------------------------------------ | ---------------------------------------------------------------------------- |
-| Dias de funcionamento das piscinas   | Qualquer data não passada é aceita                                           |
-| Horários de funcionamento            | Não considerados                                                             |
-| Antecedência mínima ou máxima        | Sem limites (exceto "não pode ser passada")                                  |
-| Isenção para crianças                | Não existe; todos pagam R$ 30,00                                             |
-| Isenção para idosos                  | Não existe; todos pagam R$ 30,00                                             |
-| Faixas etárias com preços diferentes | Não existem; preço único                                                     |
-| Identificador oficial de pessoa      | `personId` já modelado; o provedor real precisa fornecê-lo (ver Duplicidade) |
-| Horário de corte para "hoje"         | Não existe; hoje é aceito até 23:59:59 (São Paulo)                           |
-| Fuso horário do sindicato            | `America/Sao_Paulo` assumido                                                 |
+| Regra pendente                              | Comportamento atual                                                                                            |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Dias de funcionamento das piscinas          | Qualquer data não passada é aceita                                                                             |
+| Horários de funcionamento                   | Não considerados                                                                                               |
+| Antecedência mínima ou máxima               | Sem limites (exceto "não pode ser passada")                                                                    |
+| Isenção para crianças                       | Não existe; todos pagam R$ 30,00                                                                               |
+| Isenção para idosos                         | Não existe; todos pagam R$ 30,00                                                                               |
+| Faixas etárias com preços diferentes        | Não existem; preço único                                                                                       |
+| Identificador oficial de pessoa             | `personId` já modelado; o provedor real precisa fornecê-lo (ver Duplicidade)                                   |
+| Horário de corte para "hoje"                | Não existe; hoje é aceito até 23:59:59 (São Paulo)                                                             |
+| Fuso horário do sindicato                   | `America/Sao_Paulo` assumido                                                                                   |
+| Máximo de pessoas por operação              | Não existe limite; qualquer quantidade de vínculos ativos pode ser escolhida                                   |
+| Critérios de elegibilidade além do cadastro | Não existem (carência, adimplência, idade etc.); vale só a situação cadastral `active` do titular e do vínculo |
+| Texto oficial para pessoa inelegível        | Rascunho: "Cadastro inativo no momento. Procure o Sindicomerciários para regularizar." (a aprovar)             |
+| Dependente de titular inativo               | Bloqueado junto com o titular (a situação do titular vale para toda a operação); premissa a confirmar          |
 
 ### Testes que dependem de regras ainda não definidas
 
@@ -87,6 +93,53 @@ Estratégia completa em [data-model.md](./data-model.md#datas-e-fuso-horário) e
   ser passado. A meia-noite UTC **não** vira o dia em São Paulo (21:00 locais).
 - A validação de data passada ocorre só na criação da operação. Uma operação criada para hoje às
   23:50 continua válida após a meia-noite: o direito já foi pago/reservado para aquele dia.
+
+## Seleção de pessoas
+
+Segunda etapa da jornada (tela "Quem utilizará as piscinas?", rota `/pessoas`). Implementação em
+[`convex/domain/selection.ts`](../convex/domain/selection.ts) (regra) e em `src/features/selection/`
+(interface, que apenas exibe e coleta).
+
+**Regras confirmadas (aplicadas hoje):**
+
+- **Seleção individual.** O titular e cada dependente aparecem como itens separados e são
+  escolhidos um a um; o cartão inteiro é o controle de seleção.
+- **Sem pré-seleção.** Ao entrar na etapa nada está marcado, nem o titular. A escolha é sempre
+  uma ação do associado.
+- **Titular opcional.** É válido selecionar só dependentes, só o titular, ou ambos.
+- **Convidados proibidos.** Só existem pessoas cadastradas (vínculos). Não há campo para incluir
+  quem não consta no cadastro, e texto livre é recusado pelo backend.
+- **Valor inicial por pessoa: R$ 30,00.** A tela mostra quantidade, valor unitário e total
+  (R$ 30,00 × quantidade) de forma **apenas informativa**. O valor é recalculado e confirmado
+  pelo backend na criação da operação; o navegador nunca envia valores.
+- **Continuar exige ao menos uma pessoa.** Sem seleção o botão fica desabilitado, com a
+  explicação visível; o backend também recusa seleção vazia (`empty_selection`).
+- **Validação obrigatória no backend.** Antes de avançar, a seleção é validada por
+  `public/members:validateSelection`. A validação da tela não substitui a do servidor, que é
+  refeita ao criar a operação.
+- **Qualquer mudança na seleção invalida a validação anterior.** Marcar ou desmarcar uma pessoa
+  descarta o resultado (validada, recusada ou indisponível) e exige validar de novo.
+
+**Elegibilidade (o que o sistema decide hoje):** uma pessoa é elegível (`selectable`) quando o
+**titular está ativo** e o **vínculo dela com o titular está ativo**. Pessoas inelegíveis são
+exibidas, desabilitadas e com motivo em linguagem simples, mas não podem ser marcadas; se, ainda
+assim, chegarem ao backend, são recusadas (`link_inactive`, `member_inactive`). O backend também
+recusa vínculos de outro titular (`link_not_found`) e a mesma pessoa repetida
+(`duplicate_person`).
+
+**Sessão.** A prova de identificação (30 minutos) fica **apenas em memória** no navegador: nada em
+`localStorage`, `sessionStorage`, cookie ou URL. Recarregar a página ou abrir `/pessoas`
+diretamente leva de volta à identificação. Prova expirada ou inválida durante a seleção também
+leva de volta à identificação, com aviso. A seleção feita não é guardada ao voltar.
+
+**Não faz parte desta etapa:** escolha da data, checagem de duplicidade por data, criação da
+operação e pagamento (próximas etapas). Após a validação, o botão "Informar a data" aparece
+desabilitado com "Esta etapa estará disponível em breve."
+
+**Ainda pendente do sindicato** (nada foi inventado; ver a tabela de
+[regras pendentes](#regras-pendentes)): limite de pessoas por operação, critérios de
+elegibilidade além da situação cadastral, texto oficial da mensagem de inelegibilidade e o
+tratamento de dependentes de titular inativo.
 
 ## Estados da operação
 

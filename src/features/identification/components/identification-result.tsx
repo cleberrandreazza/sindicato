@@ -19,15 +19,13 @@ function peopleLabel(count: number): string {
 
 interface IdentifiedResultProps {
   member: IdentifiedMember
+  /** Segue para a seleção de pessoas, levando a prova de identificação (só em memória). */
+  onContinue: (member: IdentifiedMember) => void
   onStartOver: () => void
 }
 
-/**
- * Identificação confirmada. A seleção de pessoas é a próxima etapa da jornada e ainda não existe:
- * por isso a continuação aparece indisponível. `member.session` já está pronta para ser usada
- * por ela.
- */
-export function IdentifiedResult({ member, onStartOver }: IdentifiedResultProps) {
+/** Identificação confirmada; a continuação leva à seleção de pessoas. */
+export function IdentifiedResult({ member, onContinue, onStartOver }: IdentifiedResultProps) {
   const headingRef = useFocusOnMount<HTMLHeadingElement>()
 
   return (
@@ -79,19 +77,10 @@ export function IdentifiedResult({ member, onStartOver }: IdentifiedResultProps)
       </p>
 
       <div className="flex flex-col gap-3">
-        <Button
-          type="button"
-          size="xl"
-          className="w-full"
-          disabled
-          aria-describedby="selection-soon"
-        >
+        <Button type="button" size="xl" className="w-full" onClick={() => onContinue(member)}>
           Escolher pessoas
           <ArrowRight aria-hidden="true" />
         </Button>
-        <p id="selection-soon" className="text-center text-sm text-muted-foreground">
-          Esta etapa estará disponível em breve.
-        </p>
         <Button type="button" variant="outline" size="xl" className="w-full" onClick={onStartOver}>
           Consultar outro cadastro
         </Button>

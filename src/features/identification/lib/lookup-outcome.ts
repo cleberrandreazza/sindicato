@@ -1,6 +1,6 @@
-import { ConvexError } from 'convex/values'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import type { LookupResult } from '../api/lookup-member'
+import { messageOr, readPublicError } from '@/lib/public-error'
 import type { FieldErrors } from './form'
 
 /**
@@ -8,6 +8,16 @@ import type { FieldErrors } from './form'
  * Nenhuma regra é recalculada aqui: situação cadastral, falha de identificação e limites vêm
  * do backend; este módulo só os classifica. Detalhes internos nunca chegam à tela.
  */
+
+/** Pessoa do grupo familiar como o backend a descreve (sem CPF, sem `personId`). */
+export interface HouseholdPerson {
+  /** Identificador do VÍNCULO; é o que a seleção devolve ao backend. */
+  linkId: Id<'householdLinks'>
+  name: string
+  kind: 'holder' | 'dependent'
+  /** Decidido pelo backend (titular ativo e vínculo ativo). */
+  selectable: boolean
+}
 
 export interface IdentifiedMember {
   memberId: Id<'members'>
@@ -17,6 +27,8 @@ export interface IdentifiedMember {
   holderName: string
   /** Pessoas que o backend marcou como selecionáveis (titular + dependentes ativos). */
   selectablePeopleCount: number
+  /** Titular primeiro, depois os dependentes, na ordem do backend. */
+  people: HouseholdPerson[]
   /** Prova de identificação para as próximas chamadas. Fica só em memória. */
   session: { token: string; expiresAt: number }
 }
@@ -58,27 +70,15 @@ export function interpretLookupResult(result: LookupResult): LookupOutcome {
       selectablePeopleCount:
         (result.holder.selectable ? 1 : 0) +
         result.dependents.filter((dependent) => dependent.selectable).length,
+      people: [result.holder, ...result.dependents].map((person) => ({
+        linkId: person.linkId,
+        name: person.name,
+        kind: person.role === 'holder' ? 'holder' : 'dependent',
+        selectable: person.selectable,
+      })),
       session: result.session,
     },
   }
-}
-
-interface PublicErrorShape {
-  code: string
-  message?: unknown
-}
-
-function readPublicError(error: unknown): PublicErrorShape | null {
-  if (!(error instanceof ConvexError)) return null
-  const data: unknown = error.data
-  if (typeof data !== 'object' || data === null) return null
-  const code = (data as { code?: unknown }).code
-  if (typeof code !== 'string') return null
-  return { code, message: (data as { message?: unknown }).message }
-}
-
-function messageOr(error: PublicErrorShape, fallback: string): string {
-  return typeof error.message === 'string' && error.message !== '' ? error.message : fallback
 }
 
 /**

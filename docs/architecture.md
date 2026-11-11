@@ -93,8 +93,76 @@ convex/
     events.ts         histórico de alterações
     receipts.ts       emissão idempotente e numeração
   providers/          contratos, registry e mock/
-tests/                domain/ (puros) e convex/ (convex-test)
+tests/                domain/ (puros), convex/ (convex-test) e web/ (interface)
 ```
+
+## Estrutura do frontend
+
+```text
+src/
+  routes/                 arquivos de rota (TanStack Router): __root, index (/), pessoas (/pessoas)
+  app/providers/          AppConvexProvider e JourneyProvider (estado da jornada em memória)
+  components/layout/      JourneyLayout (faixa azul + folha no mobile; painel dividido no desktop)
+  components/ui/          componentes base (button, input, card, alert, text-field…)
+  features/identification/  etapa 1: api/ lib/ hooks/ components/
+  features/selection/       etapa 2: api/ lib/ hooks/ components/
+  lib/                    cliente Convex, env, withTimeout, readPublicError
+```
+
+Cada feature segue o mesmo padrão: `api/` (**única** camada que chama o Convex), `lib/` (funções
+puras que interpretam respostas), `hooks/` (estado da tela) e `components/` (apresentação). Os
+componentes recebem os dados e as ações por props; não importam o cliente Convex.
+
+**Estado da jornada.** `JourneyProvider` (contexto React) guarda o associado identificado
+(incluindo a prova de 30 min) e os `linkId` selecionados **apenas em memória**. Nada vai para
+`localStorage`, `sessionStorage`, cookie ou URL; recarregar a página recomeça pela identificação.
+O único dado na URL é o motivo do retorno (`/?motivo=sessao-expirada` ou
+`identificacao-necessaria`), sempre normalizado por `parseReturnReason` (valores desconhecidos
+são ignorados) e sem nenhum dado pessoal.
+
+**Fluxo das duas primeiras telas:**
+
+```mermaid
+sequenceDiagram
+  participant U as Associado
+  participant I as / (identificação)
+  participant J as JourneyProvider
+  participant P as /pessoas (seleção)
+  participant C as Convex (API pública)
+  U->>I: carteirinha + CPF
+  I->>C: members:lookup
+  C-->>I: titular, dependentes (linkId, selectable), prova
+  U->>I: "Escolher pessoas"
+  I->>J: begin(associado)
+  I->>P: navega
+  U->>P: marca pessoas (sem pré-seleção)
+  P->>C: members:validateSelection (memberId, prova, linkIds)
+  alt válida
+    C-->>P: ok + quantidade
+  else recusada
+    C-->>P: ok:false + código e mensagem
+  else prova inválida (session_invalid / member_not_found)
+    C-->>P: erro
+    P->>I: volta com ?motivo=sessao-expirada
+  end
+```
+
+**Regras da interface (a interface não decide regras):**
+
+- `selectable` vem do backend; o front só desabilita o cartão. A elegibilidade, a validade da
+  seleção e o valor cobrado são decididos no servidor.
+- O resumo (quantidade × R$ 30,00) é **informativo**: usa as funções puras de
+  `convex/domain/pricing.ts` (`calculateOperationAmounts`, `POOL_MEDICAL_FEE_CENTS`) e é
+  recalculado pelo backend na criação da operação.
+- Alterar a seleção chama `reset()` do hook de validação: qualquer resultado anterior (validada,
+  recusada, indisponível) é descartado, e uma validação em andamento não é reutilizada.
+- Chamadas ao Convex têm limite de 20 s (`withTimeout`): o cliente enfileira chamadas offline, e
+  sem o limite a tela ficaria "carregando" indefinidamente. Expirado, vira "indisponível" com
+  nova tentativa.
+- Mobile: resumo e botão fixos na base (`<md`), com `padding-bottom` de
+  `max(0.75rem, env(safe-area-inset-bottom))` e `viewport-fit=cover`; no desktop o resumo é um
+  cartão estático. Acessibilidade: cartão = `<label>` com checkbox nativo, resumo em
+  `aria-live="polite"`, avisos com `role=status`/`alert` e foco movido para eles.
 
 ## Fluxos
 
@@ -459,6 +527,12 @@ concorrentes → 1 vencedora), não a serialização real.
 21. **Tentativa registrada antes da chamada externa** (`chargeAttempts`) + chave de idempotência
     estável: concorrência e repetição não criam cobranças independentes.
 
+22. **Estado da jornada só em memória.** A prova de identificação e a seleção não são persistidas
+    no navegador; recarregar recomeça. Troca praticidade por menos exposição de dados e evita
+    prova antiga reaproveitada.
+23. **A interface nunca decide regras.** Elegibilidade (`selectable`), validade da seleção e valor
+    são do backend; o resumo de valores na tela é informativo.
+
 ## Ambiente
 
 Node **22** (`.nvmrc` = `22`; `engines`: `^22.13.0 || ^24.0.0 || >=26.0.0`, a interseção das
@@ -473,6 +547,11 @@ Vitest (`pnpm test`). `tests/domain/` roda em Node e cobre as funções puras;
 com um banco em memória, usando apenas dados fictícios. `convex-test` valida a lógica, mas
 **não simula o controle otimista de concorrência** do Convex; essa garantia foi verificada
 manualmente contra um backend local (ver business-rules.md).
+
+`tests/web/` cobre a interface: funções puras (`*-lib.test.ts`), componentes com Testing Library
+em jsdom (`// @vitest-environment jsdom` no topo do arquivo) e o roteamento real
+(`journey-routing.test.tsx`, com `createMemoryHistory` e a `routeTree` verdadeira). As telas são
+exercitadas com a validação injetada por props; nenhum teste chama um backend real.
 
 ## Segurança
 

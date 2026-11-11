@@ -12,7 +12,7 @@ import {
   interpretLookupError,
   interpretLookupResult,
 } from '../../src/features/identification/lib/lookup-outcome'
-import { TimeoutError, withTimeout } from '../../src/features/identification/lib/with-timeout'
+import { TimeoutError, withTimeout } from '../../src/lib/with-timeout'
 
 describe('máscara de CPF', () => {
   it('formata progressivamente', () => {
@@ -124,6 +124,11 @@ describe('interpretação da resposta do backend', () => {
         cpfMasked: '***.***.***-08',
         holderName: 'Ana Teste Almeida',
         selectablePeopleCount: 2,
+        people: [
+          { linkId: 'link-0', name: 'Ana Teste Almeida', kind: 'holder', selectable: true },
+          { linkId: 'link-1', name: 'Bruno', kind: 'dependent', selectable: true },
+          { linkId: 'link-2', name: 'Helena', kind: 'dependent', selectable: false },
+        ],
         session: { token: 'tok', expiresAt: 123 },
       },
     })

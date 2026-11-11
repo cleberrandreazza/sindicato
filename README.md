@@ -4,11 +4,21 @@ Aplicação web pública para pagamento da taxa médica de utilização das pisc
 (R$ 30 por pessoa), sem criação de conta. O associado informa carteirinha e CPF, seleciona as
 pessoas e a data de utilização e paga via Pix ou cartão em até 15 minutos.
 
-> **Estado atual:** estrutura do projeto, modelo de dados, regras de negócio no backend
-> (criação de operação com prevenção de duplicidade, expiração, confirmação de pagamento e
-> pagamento tardio com análise administrativa), contratos dos serviços externos e mocks de
-> desenvolvimento, com testes automatizados. Telas, entradas públicas e integrações reais ainda
-> não existem. Este projeto **não** é um sistema geral de reservas.
+> **Estado atual:** backend completo (modelo de dados, criação de operação com prevenção de
+> duplicidade, expiração, confirmação de pagamento, pagamento tardio com análise administrativa,
+> API pública, contratos dos serviços externos e mocks de desenvolvimento) e as **duas primeiras
+> telas da jornada** (identificação e seleção de pessoas), com testes automatizados. Integrações
+> reais (cadastro do sindicato, Stripe, e-mail/WhatsApp) ainda não existem; o desenvolvimento usa
+> mocks. Este projeto **não** é um sistema geral de reservas.
+
+| Etapa da jornada      | Situação                                                                    |
+| --------------------- | --------------------------------------------------------------------------- |
+| 1. Identificação      | Implementada (`/`)                                                          |
+| 2. Seleção de pessoas | Implementada (`/pessoas`); valida a seleção no backend e para antes da data |
+| 3. Data de utilização | Não implementada (backend pronto: `checkDuplicates`, `createOperation`)     |
+| 4. Resumo             | Não implementada                                                            |
+| 5. Pagamento          | Não implementada (backend pronto: `startPayment`, `getOperation`)           |
+| 6. Comprovante        | Não implementada (backend gera o comprovante; falta a tela e o envio real)  |
 
 ## Stack
 
@@ -16,7 +26,7 @@ React · TypeScript (strict) · Vite · TanStack Router · Tailwind CSS v4 · sh
 
 ## Documentação
 
-- [Regras de negócio](docs/business-rules.md) (confirmadas, pendentes, estados, pagamento tardio, duplicidade, mensagens)
+- [Regras de negócio](docs/business-rules.md) (confirmadas, pendentes, seleção de pessoas, estados, pagamento tardio, duplicidade, mensagens)
 - [Arquitetura](docs/architecture.md)
 - [Modelo de dados](docs/data-model.md)
 - [Integrações externas](docs/integrations.md)
@@ -59,6 +69,32 @@ Organização (`src/features/identification/`): `api/` (única chamada ao Convex
 (`<largura>-<n>-<estado>.png`). Regras de negócio continuam só no backend: o front apenas
 classifica as respostas (`identification_failed` → "não encontrado", cadastro inativo,
 `too_many_attempts`, demais falhas → "tente novamente").
+
+### Tela de seleção de pessoas
+
+A rota `/pessoas` é a segunda etapa ("Quem utilizará as piscinas?"). Parte da identificação
+(botão "Escolher pessoas") e usa `public/members:validateSelection` antes de avançar.
+
+- **Identificadores:** a seleção usa o `linkId` do vínculo (o `personId` nunca é enviado ao
+  navegador, por decisão da API pública). Nomes e valores nunca vão ao backend.
+- **Sessão:** a prova de identificação e a seleção ficam só em memória (`JourneyProvider`, em
+  `src/app/providers/`); nada em `localStorage`, `sessionStorage`, cookie ou URL. Recarregar a
+  página, abrir `/pessoas` direto ou ter a prova recusada (`session_invalid`) leva de volta a `/`
+  com um aviso (`?motivo=sessao-expirada` ou `?motivo=identificacao-necessaria`).
+- **Valores:** o resumo (R$ 30,00 por pessoa) é informativo e usa a função pura de preço do
+  backend; o valor cobrado é sempre recalculado no servidor ao criar a operação.
+- **Elegibilidade:** quem o backend marca como não selecionável aparece desabilitado, com
+  justificativa; o front não decide elegibilidade.
+- **Seleção:** nenhuma pessoa vem marcada; o titular é opcional; não há convidados. Qualquer
+  mudança na seleção invalida a validação anterior. Regras completas em
+  [docs/business-rules.md](docs/business-rules.md#seleção-de-pessoas).
+- **Mobile:** em telas estreitas o resumo e o botão ficam fixos na base, respeitando a área
+  segura do aparelho (`viewport-fit=cover` + `env(safe-area-inset-bottom)`), sem cobrir conteúdo.
+- **Próxima etapa:** após validar, a tela confirma a seleção e indica que a data virá em seguida
+  (ainda não implementada).
+
+Organização: `src/features/selection/` (`api/`, `lib/`, `hooks/`, `components/`), no mesmo padrão
+da identificação. Capturas em `docs/screenshots/<largura>-s<n>-<estado>.png`.
 
 ### Variáveis do backend (deployment Convex)
 
@@ -131,14 +167,14 @@ nasce pendente; a confirmação simulada está descrita em
 src/
   app/
     router/       criação e registro do router
-    providers/    providers globais (Convex)
+    providers/    providers globais (Convex e JourneyProvider: identificação e seleção em memória)
   components/
     ui/           componentes shadcn/ui
     shared/       componentes reutilizáveis do projeto
     layout/       estrutura das telas da jornada (JourneyLayout)
-  features/       módulos por funcionalidade: identification (pronto); previstos: dependents,
-                  pool-payment, payment-status, receipts, admin
-  lib/            utilitários e configuração (cn, env)
+  features/       módulos por funcionalidade: identification e selection (prontos); previstos:
+                  usage-date, summary, pool-payment, payment-status, receipts, admin
+  lib/            utilitários e configuração (cn, env, cliente Convex, with-timeout, public-error)
   services/       adaptadores do frontend (chamadas ao Convex), quando necessário
   types/          tipos compartilhados
   routes/         rotas por arquivo (TanStack Router)

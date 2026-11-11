@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Id } from '../../convex/_generated/dataModel'
 import type { LookupFn, LookupResult } from '../../src/features/identification/api/lookup-member'
 import { IdentificationPage } from '../../src/features/identification/components/identification-page'
+import type { IdentifiedMember } from '../../src/features/identification/lib/lookup-outcome'
 
 afterEach(cleanup)
 
@@ -46,9 +47,18 @@ const inactiveResult: LookupResult = {
   message: 'O cadastro do titular não está ativo. Entre em contato com o Sindicomerciários.',
 }
 
-function setup(lookup: LookupFn) {
+function setup(
+  lookup: LookupFn,
+  options: { onContinue?: (member: IdentifiedMember) => void } = {},
+) {
   const user = userEvent.setup()
-  render(<IdentificationPage lookup={lookup} />)
+  render(
+    <IdentificationPage
+      lookup={lookup}
+      onContinue={options.onContinue ?? (() => {})}
+      returnReason={undefined}
+    />,
+  )
   return {
     user,
     card: () => screen.getByLabelText('Número da carteirinha') as HTMLInputElement,
@@ -155,7 +165,26 @@ describe('IdentificationPage', () => {
     expect(text).not.toContain('100.000.001-08')
 
     const next = screen.getByRole('button', { name: /Escolher pessoas/ })
-    expect((next as HTMLButtonElement).disabled).toBe(true)
+    expect((next as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('"Escolher pessoas" entrega o associado identificado (com a lista de pessoas) à próxima etapa', async () => {
+    const onContinue = vi.fn()
+    const ui = setup(
+      vi.fn<LookupFn>(async () => activeResult),
+      { onContinue },
+    )
+    await fillAndSubmit(ui)
+    await ui.user.click(await screen.findByRole('button', { name: /Escolher pessoas/ }))
+
+    expect(onContinue).toHaveBeenCalledTimes(1)
+    const member = onContinue.mock.calls[0]![0] as IdentifiedMember
+    expect(member.memberId).toBe('member-1')
+    expect(member.session.token).toBe('token-secreto-da-sessao')
+    expect(member.people.map((person) => [person.linkId, person.kind])).toEqual([
+      ['l0', 'holder'],
+      ['l1', 'dependent'],
+    ])
   })
 
   it('"Consultar outro cadastro" volta ao início com campos limpos', async () => {

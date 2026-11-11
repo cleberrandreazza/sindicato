@@ -8,3 +8,11 @@ import { env } from '@/lib/env'
 export const convexClient: ConvexReactClient | null = env.convexUrl
   ? new ConvexReactClient(env.convexUrl)
   : null
+
+/** Lançado quando a aplicação está sem `VITE_CONVEX_URL`; tratado como serviço indisponível. */
+export class BackendNotConfiguredError extends Error {
+  constructor() {
+    super('Backend não configurado.')
+    this.name = 'BackendNotConfiguredError'
+  }
+}

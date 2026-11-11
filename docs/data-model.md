@@ -114,6 +114,14 @@ erDiagram
 | Datas: lógica isolada em `domain/time.ts`                                        | Estratégia de fuso documentada e testada; `todayInTimeZone` virou `businessCalendarDate`.                |
 | Códigos de erro `dependent_not_found/inactive` → `link_not_found/inactive`       | Consequência da troca de modelo; mesma regra (vínculo inexistente ou inativo é recusado).                |
 
+### Telas de identificação e seleção (frontend)
+
+**Nenhuma mudança de schema, índice ou tabela.** As duas primeiras telas só leem o que já existe
+(`members`, `people`, `householdLinks`, `identificationSessions`) pelas funções públicas
+`members:lookup` e `members:validateSelection`. A seleção feita na tela **não é persistida**: ela
+só vira dado (`operationPeople`) quando a operação é criada, em etapa futura. O navegador
+identifica cada pessoa pelo id do vínculo (`householdLinks`), nunca pelo `personId`.
+
 ## Estado financeiro × estado operacional
 
 São dois eixos independentes na mesma operação:

@@ -1,7 +1,7 @@
 import { api } from '../../../../convex/_generated/api'
 import type { LookupResult } from '../../../../convex/public/members'
-import { convexClient } from '@/lib/convex-client'
-import { withTimeout } from '../lib/with-timeout'
+import { BackendNotConfiguredError, convexClient } from '@/lib/convex-client'
+import { withTimeout } from '@/lib/with-timeout'
 
 /**
  * ÚNICO ponto da feature que conhece o Convex: chama `public/members:lookup`, o contrato
@@ -18,14 +18,6 @@ export interface LookupInput {
 }
 
 export type LookupFn = (input: LookupInput) => Promise<LookupResult>
-
-/** Lançado quando a aplicação está sem `VITE_CONVEX_URL`; tratado como serviço indisponível. */
-export class BackendNotConfiguredError extends Error {
-  constructor() {
-    super('Backend não configurado.')
-    this.name = 'BackendNotConfiguredError'
-  }
-}
 
 /** Tempo máximo de espera pela consulta antes de oferecer nova tentativa. */
 export const LOOKUP_TIMEOUT_MS = 20_000
