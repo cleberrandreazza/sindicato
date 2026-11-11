@@ -211,17 +211,22 @@ Erros: `simulation_disabled`, `no_charge_for_operation`.
 
 ## Seleção de implementação (`registry.ts`)
 
-Variáveis do **deployment Convex** (não do `.env.local`):
+Variáveis do **deployment Convex** (não do `.env.local`). Um deployment novo começa **vazio**:
+`convex env list` sem nomes → `getProviders()` lança `ProviderError('configuration')` no lookup
+(`Defina MEMBER_PROVIDER…` ou mock recusado), e a API pública devolve `service_unavailable`.
 
 | Variável                          | Valores                      | Observação                                                                                                                                                  |
 | --------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `APP_ENV`                         | `development`                | Sem isso, mocks são **recusados** e nada é assumido por padrão.                                                                                             |
-| `MEMBER_PROVIDER`                 | `mock`                       | Em `development`, o padrão é `mock`.                                                                                                                        |
+| `APP_ENV`                         | `development`                | **Obrigatório** para mocks. Sem isso, mocks são **recusados** e nada é assumido por padrão.                                                                 |
+| `MEMBER_PROVIDER`                 | `mock`                       | Em `development`, o padrão é `mock` se a variável estiver ausente; definir deixa explícito.                                                                 |
 | `PAYMENT_PROVIDER`                | `mock` (futuro: `stripe`)    | idem                                                                                                                                                        |
 | `NOTIFICATION_PROVIDER`           | `mock`                       | idem                                                                                                                                                        |
-| `CPF_HASH_SECRET`                 | string ≥ 16 chars            | Segredo do HMAC do CPF (`domain/privacy.ts`).                                                                                                               |
+| `CPF_HASH_SECRET`                 | string ≥ 16 chars            | Segredo do HMAC do CPF (`domain/privacy.ts`). Sem ele, lookup também falha com `service_unavailable`.                                                       |
 | `OPERATION_TOKEN_SECRET`          | string ≥ 32 chars            | Deriva o `accessToken` quando `createOperation` usa `requestId` (`domain/idempotency.ts`). Sem ele, criação com `requestId` responde `service_unavailable`. |
 | `OPERATION_TOKEN_SECRET_PREVIOUS` | string ≥ 32 chars (opcional) | Segredo anterior durante a rotação; a repetição testa os dois.                                                                                              |
+
+Dados fictícios do `MockMemberProvider` (ex.: carteirinha `100001` / CPF `100.000.001-08`) só
+respondem depois que `APP_ENV=development` habilita o mock — não precisam de seed no banco.
 
 Para adicionar uma integração real:
 

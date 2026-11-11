@@ -170,12 +170,29 @@ Organização: `src/features/payment/`.
 
 ### Variáveis do backend (deployment Convex)
 
-Ficam no deployment, não no `.env.local`. Para desenvolvimento local:
+Ficam **somente** no deployment Convex (`pnpm exec convex env …`), **não** no `.env.local`
+(este arquivo só carrega `VITE_CONVEX_URL` / `CONVEX_DEPLOYMENT` para o frontend e o CLI).
+
+**Novo projeto Convex:** o deployment nasce **sem** variáveis. Sem `APP_ENV=development` (e
+sem `CPF_HASH_SECRET`), a identificação responde `service_unavailable` / “falha no
+MemberProvider” com `code: configuration`. Isso **não** é bug do mock: é configuração ausente.
+
+Para desenvolvimento local (rode uma vez após criar ou trocar o deployment):
 
 ```bash
 pnpm exec convex env set APP_ENV development
+pnpm exec convex env set MEMBER_PROVIDER mock
+pnpm exec convex env set PAYMENT_PROVIDER mock
+pnpm exec convex env set NOTIFICATION_PROVIDER mock
 pnpm exec convex env set CPF_HASH_SECRET "$(node -e 'console.log(require("crypto").randomBytes(24).toString("hex"))')"
 pnpm exec convex env set OPERATION_TOKEN_SECRET "$(node -e 'console.log(require("crypto").randomBytes(32).toString("hex"))')"
+pnpm exec convex env list
+```
+
+Conferir a identificação (dados fictícios do mock):
+
+```bash
+pnpm exec convex run public/members:lookup '{"membershipNumber":"100001","cpf":"10000000108"}'
 ```
 
 `OPERATION_TOKEN_SECRET` (≥ 32 caracteres) deriva o `accessToken` quando a criação usa
@@ -183,9 +200,9 @@ pnpm exec convex env set OPERATION_TOKEN_SECRET "$(node -e 'console.log(require(
 `OPERATION_TOKEN_SECRET_PREVIOUS` e grave o novo em `OPERATION_TOKEN_SECRET`. Detalhes em
 [docs/architecture.md](docs/architecture.md).
 
-Com `APP_ENV=development`, os providers usam mocks por padrão. Sem essa variável, mocks são
-recusados (proteção contra uso acidental em produção). Detalhes em
-[docs/integrations.md](docs/integrations.md).
+Com `APP_ENV=development`, os providers usam mocks por padrão (mesmo sem
+`MEMBER_PROVIDER=mock`). Sem `APP_ENV=development`, mocks são **recusados** (proteção contra uso
+acidental em produção). Detalhes em [docs/integrations.md](docs/integrations.md).
 
 ## Dados fictícios de teste (somente desenvolvimento)
 

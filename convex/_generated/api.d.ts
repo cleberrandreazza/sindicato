@@ -13,6 +13,7 @@ import type * as domain_chargeMessages from "../domain/chargeMessages.js";
 import type * as domain_charges from "../domain/charges.js";
 import type * as domain_confirmation from "../domain/confirmation.js";
 import type * as domain_cpf from "../domain/cpf.js";
+import type * as domain_idempotency from "../domain/idempotency.js";
 import type * as domain_identification from "../domain/identification.js";
 import type * as domain_limits from "../domain/limits.js";
 import type * as domain_messages from "../domain/messages.js";
@@ -30,8 +31,6 @@ import type * as members_sync from "../members/sync.js";
 import type * as notifications_outbox from "../notifications/outbox.js";
 import type * as notifications_receiptAccess from "../notifications/receiptAccess.js";
 import type * as payments_chargeView from "../payments/chargeView.js";
-import type * as receipts_format from "../receipts/format.js";
-import type * as receipts_pdfDocument from "../receipts/pdfDocument.js";
 import type * as payments_charges from "../payments/charges.js";
 import type * as payments_claims from "../payments/claims.js";
 import type * as payments_confirmations from "../payments/confirmations.js";
@@ -52,6 +51,8 @@ import type * as providers_paymentProvider from "../providers/paymentProvider.js
 import type * as providers_registry from "../providers/registry.js";
 import type * as public_members from "../public/members.js";
 import type * as public_payments from "../public/payments.js";
+import type * as receipts_format from "../receipts/format.js";
+import type * as receipts_pdfDocument from "../receipts/pdfDocument.js";
 import type * as security_rateLimit from "../security/rateLimit.js";
 
 import type {
@@ -66,6 +67,7 @@ declare const fullApi: ApiFromModules<{
   "domain/charges": typeof domain_charges;
   "domain/confirmation": typeof domain_confirmation;
   "domain/cpf": typeof domain_cpf;
+  "domain/idempotency": typeof domain_idempotency;
   "domain/identification": typeof domain_identification;
   "domain/limits": typeof domain_limits;
   "domain/messages": typeof domain_messages;
@@ -83,8 +85,6 @@ declare const fullApi: ApiFromModules<{
   "notifications/outbox": typeof notifications_outbox;
   "notifications/receiptAccess": typeof notifications_receiptAccess;
   "payments/chargeView": typeof payments_chargeView;
-  "receipts/format": typeof receipts_format;
-  "receipts/pdfDocument": typeof receipts_pdfDocument;
   "payments/charges": typeof payments_charges;
   "payments/claims": typeof payments_claims;
   "payments/confirmations": typeof payments_confirmations;
@@ -105,6 +105,8 @@ declare const fullApi: ApiFromModules<{
   "providers/registry": typeof providers_registry;
   "public/members": typeof public_members;
   "public/payments": typeof public_payments;
+  "receipts/format": typeof receipts_format;
+  "receipts/pdfDocument": typeof receipts_pdfDocument;
   "security/rateLimit": typeof security_rateLimit;
 }>;
 
