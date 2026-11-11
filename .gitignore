@@ -1,0 +1,14 @@
+node_modules
+dist
+*.local
+.env
+.env.*
+!.env.example
+.vite
+*.tsbuildinfo
+.DS_Store
+npm-debug.log*
+.vscode/*
+!.vscode/extensions.json
+.idea
+.tanstack
