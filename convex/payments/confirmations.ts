@@ -1,3 +1,4 @@
+import { internal } from '../_generated/api'
 import type { Id } from '../_generated/dataModel'
 import type { MutationCtx } from '../_generated/server'
 import { decideConfirmation } from '../domain/confirmation'
@@ -122,6 +123,11 @@ export async function applyConfirmation(
       financialStatus: 'paid',
       operationalStatus: 'confirmed',
     })
+    // PDF + e-mail assíncronos: falha de notificação NÃO desfaz a confirmação financeira.
+    await ctx.scheduler.runAfter(0, internal.notifications.outbox.afterConfirmed, {
+      operationId: operation._id,
+      receiptId,
+    })
     return { outcome: 'confirmed', operationId: operation._id, receiptId }
   }
 
@@ -150,5 +156,11 @@ export async function applyConfirmation(
     operationalStatus: nextOperational,
     note: [`motivo: ${reason}`, ...notes].join('; '),
   })
+  if (escalate) {
+    await ctx.scheduler.runAfter(0, internal.notifications.outbox.afterUnderReview, {
+      operationId: operation._id,
+      reason,
+    })
+  }
   return { outcome: 'under_review', operationId: operation._id, reviewId, reason }
 }

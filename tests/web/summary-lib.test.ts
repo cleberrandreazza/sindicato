@@ -202,6 +202,9 @@ describe('checkRecoveredOperation', () => {
     presentation: { code: 'awaiting_payment', message: 'Aguardando a confirmação.' },
     people: [],
     receiptNumber: null,
+    receipt: null,
+    notifications: [],
+    paidAt: null,
     payment: null,
     ...patch,
   })

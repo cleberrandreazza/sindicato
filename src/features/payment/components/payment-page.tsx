@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { JourneyLayout } from '@/components/layout/journey-layout'
 import { Button } from '@/components/ui/button'
 import { formatBRL, peopleLabel } from '@/features/selection/lib/summary'
@@ -19,6 +19,8 @@ interface PaymentPageProps {
   onFinish: () => void | Promise<void>
   /** Credencial inválida / operação inacessível: pedir nova identificação. */
   onSessionExpired?: () => void | Promise<void>
+  /** Pagamento confirmado ou em análise: seguir para a etapa do comprovante. */
+  onOutcomeReady?: () => void | Promise<void>
   start?: StartPaymentFn
   getState?: GetOperationFn
   nowMs?: () => number
@@ -32,6 +34,7 @@ export function PaymentPage({
   operation,
   onFinish,
   onSessionExpired,
+  onOutcomeReady,
   start,
   getState,
   nowMs,
@@ -52,6 +55,28 @@ export function PaymentPage({
   const startingMethod = payment.state.status === 'starting' ? payment.state.method : null
   const busy = payment.state.status === 'starting' || payment.state.status === 'refreshing'
   const active = payment.state.status === 'active' ? payment.state.active : null
+
+  useEffect(() => {
+    if (!onOutcomeReady) return
+    if (payment.state.status === 'active') {
+      const { operationalStatus } = payment.state.active
+      if (operationalStatus === 'confirmed' || operationalStatus === 'under_review') {
+        void onOutcomeReady()
+      }
+    }
+    if (payment.state.status === 'closed') {
+      const code = payment.state.code
+      if (
+        code === 'confirmed' ||
+        code === 'under_review_late_payment' ||
+        code === 'operation_under_review' ||
+        code === 'operation_already_paid'
+      ) {
+        void onOutcomeReady()
+      }
+    }
+  }, [onOutcomeReady, payment.state])
+
   const canChoose =
     !active &&
     (payment.state.status === 'idle' ||

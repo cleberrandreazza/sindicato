@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ComprovanteRouteImport } from './routes/comprovante'
 import { Route as DataRouteImport } from './routes/data'
 import { Route as PagamentoRouteImport } from './routes/pagamento'
 import { Route as PessoasRouteImport } from './routes/pessoas'
@@ -18,6 +19,11 @@ import { Route as ResumoRouteImport } from './routes/resumo'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComprovanteRoute = ComprovanteRouteImport.update({
+  id: '/comprovante',
+  path: '/comprovante',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DataRoute = DataRouteImport.update({
@@ -43,6 +49,7 @@ const ResumoRoute = ResumoRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/comprovante': typeof ComprovanteRoute
   '/data': typeof DataRoute
   '/pagamento': typeof PagamentoRoute
   '/pessoas': typeof PessoasRoute
@@ -50,6 +57,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/comprovante': typeof ComprovanteRoute
   '/data': typeof DataRoute
   '/pagamento': typeof PagamentoRoute
   '/pessoas': typeof PessoasRoute
@@ -58,6 +66,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/comprovante': typeof ComprovanteRoute
   '/data': typeof DataRoute
   '/pagamento': typeof PagamentoRoute
   '/pessoas': typeof PessoasRoute
@@ -65,14 +74,23 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/data' | '/pagamento' | '/pessoas' | '/resumo'
+  fullPaths:
+    '/' | '/comprovante' | '/data' | '/pagamento' | '/pessoas' | '/resumo'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/data' | '/pagamento' | '/pessoas' | '/resumo'
-  id: '__root__' | '/' | '/data' | '/pagamento' | '/pessoas' | '/resumo'
+  to: '/' | '/comprovante' | '/data' | '/pagamento' | '/pessoas' | '/resumo'
+  id:
+    | '__root__'
+    | '/'
+    | '/comprovante'
+    | '/data'
+    | '/pagamento'
+    | '/pessoas'
+    | '/resumo'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ComprovanteRoute: typeof ComprovanteRoute
   DataRoute: typeof DataRoute
   PagamentoRoute: typeof PagamentoRoute
   PessoasRoute: typeof PessoasRoute
@@ -86,6 +104,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/comprovante': {
+      id: '/comprovante'
+      path: '/comprovante'
+      fullPath: '/comprovante'
+      preLoaderRoute: typeof ComprovanteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/data': {
@@ -121,6 +146,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ComprovanteRoute: ComprovanteRoute,
   DataRoute: DataRoute,
   PagamentoRoute: PagamentoRoute,
   PessoasRoute: PessoasRoute,

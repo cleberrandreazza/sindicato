@@ -28,9 +28,9 @@ export const UNDER_REVIEW_MESSAGE =
 export const AWAITING_PAYMENT_MESSAGE =
   'Aguardando a confirmação do pagamento. Conclua o pagamento dentro de 15 minutos.'
 
-/** Rascunho. */
+/** Rascunho. WhatsApp ainda não está conectado — não afirmar envio nesse canal. */
 export const CONFIRMED_MESSAGE =
-  'Pagamento confirmado. O comprovante será enviado por e-mail e WhatsApp.'
+  'Pagamento confirmado. O comprovante está disponível para download e será enviado por e-mail.'
 
 /** Rascunho. Orienta a não pagar de novo caso o pagamento ainda esteja a caminho. */
 export const EXPIRED_MESSAGE =

@@ -161,6 +161,8 @@ export const notificationStatus = v.union(
   v.literal('pending'),
   v.literal('sent'),
   v.literal('failed'),
+  /** Canal preparado na arquitetura, mas sem provedor conectado (ex.: WhatsApp nesta etapa). */
+  v.literal('not_configured'),
 )
 export type NotificationStatus = Infer<typeof notificationStatus>
 

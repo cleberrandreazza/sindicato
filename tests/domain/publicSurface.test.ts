@@ -51,6 +51,8 @@ describe('superfície pública do backend', () => {
       'public/payments:checkDuplicates (query)',
       'public/payments:createOperation (mutation)',
       'public/payments:getOperation (query)',
+      'public/payments:getReceiptDownloadUrl (action)',
+      'public/payments:requestReceiptEmail (action)',
       'public/payments:startPayment (action)',
     ])
   })

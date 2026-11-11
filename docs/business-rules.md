@@ -259,7 +259,27 @@ Confirmação financeira só pelo fluxo autorizado do backend (`providerEvents` 
 - Idempotência da cobrança: repetir `startPayment` reutiliza cobrança pendente da mesma forma
   (`reused: true`); outra forma com pendente → `payment_method_conflict`.
 
-**Pendente:** Stripe real, webhook HTTP público, comprovante definitivo, textos finais do sindicato.
+**Pendente (checkout):** Stripe real, webhook HTTP público, textos finais do sindicato.
+
+## Comprovante definitivo e notificações
+
+**Critérios para emitir o comprovante definitivo (PDF):** cobrança validada pelo mecanismo
+autorizado; financeiro `paid` (ou `paid_late` após aprovação administrativa); operacional
+`confirmed`; operação **não** em análise. O frontend não produz comprovante definitivo por conta
+própria. Numeração `SC-AAAA-NNNNNN` atômica no backend; reprocessamento reutiliza o mesmo registro
+e o mesmo PDF.
+
+**Pagamento tardio:** sem PDF definitivo, sem e-mail de confirmação de utilização, sem liberação
+automática, sem reembolso automático.
+
+**E-mail:** outbox assíncrono após confirmação. Falha de envio **não** altera `paid`/`confirmed`.
+Reprocessamento do evento do provedor não reenvia. Nova tentativa controlada via
+`requestReceiptEmail` apenas se a última falhou.
+
+**WhatsApp:** contrato pronto; nesta etapa o histórico registra `not_configured` (nenhum envio).
+
+**Download:** `getReceiptDownloadUrl` exige `operationId` + `accessToken`; URL temporária do File
+Storage. Token inválido → mesma resposta de operação inexistente.
 
 ## Estados da operação
 
@@ -491,7 +511,7 @@ utilização dependente de validação administrativa. Não promete liberação 
 | Código             | Quando                                  | Texto                                                                                                     |
 | ------------------ | --------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | `awaiting_payment` | Dentro do prazo                         | Aguardando a confirmação do pagamento. Conclua o pagamento dentro de 15 minutos.                          |
-| `confirmed`        | Pago e liberado                         | Pagamento confirmado. O comprovante será enviado por e-mail e WhatsApp.                                   |
+| `confirmed`        | Pago e liberado                         | Pagamento confirmado. O comprovante está disponível para download e será enviado por e-mail.              |
 | `expired`          | Prazo encerrado sem recebimento         | O prazo de 15 minutos terminou. Se já pagou, não pague novamente… Se ainda deseja, faça nova solicitação. |
 | `under_review`     | Análise por outro motivo (sem "atraso") | Pagamento identificado, em verificação, não pagar de novo, utilização depende de validação.               |
 | `rejected`         | Análise concluída sem liberação         | A análise foi concluída e a utilização não foi liberada. Entre em contato com o sindicato.                |
@@ -520,11 +540,11 @@ recusa sem `APP_ENV=development`).
   retomar, um webhook posterior dessa cobrança vira `unknown_transaction` + alerta. Não há
   reconciliação automática (`getPaymentStatus` não é chamado por nenhuma rotina) nem expiração
   automática de tentativas `creating` órfãs.
-- **Notificações:** nada é enviado; devolve apenas um id simulado.
+- **Notificações:** e-mail mock registra tentativa/`sent`; WhatsApp fica `not_configured`.
 - **Cobranças desconhecidas e reenvios do provedor:** só ocorrem se forem simulados nos testes.
 - **Regras de funcionamento, antecedência e isenções:** inexistentes (ver pendências).
-- **Comprovante:** o registro e o número existem; o arquivo PDF ainda não é gerado. O prefixo
-  `SC` da numeração é provisório.
+- **Comprovante:** PDF gerado no backend (File Storage); prefixo `SC` provisório. E-mail mock;
+  WhatsApp `not_configured`.
 - **Identificação:** há limites técnicos (5 falhas/15 min por carteirinha, 120 consultas/min
   global, 10 operações/15 min por titular), mas **não** limite por IP nem CAPTCHA (o Convex não
   expõe a origem). Um atacante pode bloquear uma carteirinha por 15 min. Ver

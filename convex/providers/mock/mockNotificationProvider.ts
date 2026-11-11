@@ -25,8 +25,12 @@ function assertE164(phone: string): void {
 export class MockNotificationProvider implements NotificationProvider {
   readonly name = 'mock'
 
-  async sendReceiptEmail({ to }: SendReceiptEmailInput): Promise<NotificationSendResult> {
+  async sendReceiptEmail({ to, content }: SendReceiptEmailInput): Promise<NotificationSendResult> {
     assertEmail(to)
+    // Simulação: registra mentalmente o assunto/conteúdo sem logar PII. O PDF é referenciado
+    // por `receiptUrl` quando o File Storage já gerou o arquivo.
+    void content.receiptNumber
+    void content.receiptUrl
     return { providerMessageId: `mock_email_${crypto.randomUUID()}` }
   }
 

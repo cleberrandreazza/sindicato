@@ -160,7 +160,7 @@ Como cada requisito da integração futura é atendido:
   o prazo) e expiração do Pix alinhada a 15 minutos.
 - Reconciliação (`getPaymentStatus`) para cobranças cujo webhook nunca chegou e para tentativas
   `creating` órfãs (ver [business-rules.md](./business-rules.md#limitações-do-mock)).
-- Notificações (e-mail/WhatsApp) e comprovante em PDF: continuam fora desta etapa.
+- Comprovante PDF + e-mail mock + WhatsApp preparado (`not_configured`): ver seção ao final.
 
 ## Simulação de pagamento (somente desenvolvimento)
 
@@ -203,7 +203,8 @@ Erros: `simulation_disabled`, `no_charge_for_operation`.
   dizem exatamente a mesma coisa.
 - Ao receber `under_review` em `ingest(...).result` (não nulo), o chamador (webhook) deve agendar o envio
   da atualização nos dois canais, gravando `notifications.kind = 'payment_under_review'`.
-  **Ainda não implementado**: apenas contrato, schema e mock. O WhatsApp real exigirá template
+  **Estado atual**: outbox de e-mail com mock; WhatsApp grava `not_configured`.
+  O WhatsApp real exigirá template
   aprovado para mensagens iniciadas pela empresa.
 - Canais independentes: falha em um não impede o outro. Cada tentativa vira uma linha em
   `notifications`.
@@ -336,4 +337,8 @@ A API pública chega até a criação da **cobrança** (`startPayment`). Confirm
   público de webhook (HTTP action) e segredo de assinatura; expiração do Pix alinhada a 15 min.
 - **E-mail:** provedor, domínio remetente (SPF/DKIM), modelo da mensagem.
 - **WhatsApp:** API oficial (WhatsApp Business/Cloud API), templates aprovados e opt-in.
-- **Comprovante em PDF:** geração e armazenamento no Convex File Storage; `receiptUrl` assinado.
+- **Comprovante em PDF:** geração pura + File Storage implementados; layout oficial do sindicato pendente.
+- **E-mail real:** escolher provedor, implementar adapter em `NotificationProvider`, configurar
+  `NOTIFICATION_PROVIDER` e segredos no deployment. Até lá o mock **não** envia e-mail real.
+- **WhatsApp:** consentimento, templates aprovados e fornecedor definidos pelo sindicato; conectar
+  sem alterar regras financeiras.

@@ -71,6 +71,9 @@ const view = (patch: Partial<OperationView> = {}): OperationView => ({
   presentation: { code: 'awaiting_payment', message: 'Aguardando o pagamento.' },
   people: [],
   receiptNumber: null,
+  receipt: null,
+  notifications: [],
+  paidAt: null,
   payment: null,
   ...patch,
 })

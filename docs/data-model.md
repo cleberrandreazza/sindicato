@@ -114,6 +114,13 @@ erDiagram
 | Datas: lógica isolada em `domain/time.ts`                                        | Estratégia de fuso documentada e testada; `todayInTimeZone` virou `businessCalendarDate`.                |
 | Códigos de erro `dependent_not_found/inactive` → `link_not_found/inactive`       | Consequência da troca de modelo; mesma regra (vínculo inexistente ou inativo é recusado).                |
 
+### Comprovantes e notificações (Prompt 12)
+
+- `receipts.fileStorageId`: PDF no `_storage` após confirmação válida.
+- `notifications.status`: inclui `not_configured` (canal sem provedor, ex. WhatsApp).
+- Relação: operação 1—0..1 comprovante; comprovante 1—N tentativas de notificação.
+- Índices: `receipts.by_operation`, `receipts.by_receipt_number`, `notifications.by_operation`.
+
 ### Telas da jornada (frontend)
 
 As quatro primeiras telas usam as funções públicas existentes. A etapa 4 **cria** a operação

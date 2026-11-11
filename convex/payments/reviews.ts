@@ -1,4 +1,5 @@
 import { ConvexError, v } from 'convex/values'
+import { internal } from '../_generated/api'
 import { internalMutation } from '../_generated/server'
 import { canTransitionOperational } from '../domain/statuses'
 import { reacquireClaims, releaseClaims } from './claims'
@@ -43,11 +44,16 @@ export const resolve = internalMutation({
           throw new ConvexError({ code: 'claim_conflict', names: conflicts })
         }
         if (operation.financialStatus === 'unpaid') financialStatus = 'paid'
+        // paid_late aprovado na análise: financeiro permanece paid_late; operacional confirmed.
         operationalStatus = 'confirmed'
-        await issueReceipt(ctx, {
+        const receiptId = await issueReceipt(ctx, {
           operationId: operation._id,
           transactionId: review.transactionId,
           nowMs: now,
+        })
+        await ctx.scheduler.runAfter(0, internal.notifications.outbox.afterConfirmed, {
+          operationId: operation._id,
+          receiptId,
         })
       } else {
         operationalStatus = 'rejected'

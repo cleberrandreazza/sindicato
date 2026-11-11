@@ -184,6 +184,19 @@ export const createOperation = mutation({
   },
 })
 
+export interface ReceiptSummary {
+  receiptNumber: string
+  /** PDF já gravado no File Storage. */
+  fileReady: boolean
+}
+
+export interface NotificationSummary {
+  channel: 'email' | 'whatsapp'
+  status: 'pending' | 'sent' | 'failed' | 'not_configured'
+  /** Motivo sanitizado (nunca stack/token). */
+  failureReason: string | null
+}
+
 export interface OperationView {
   operationId: Id<'paymentOperations'>
   usageDate: string
@@ -200,8 +213,14 @@ export interface OperationView {
   /** Código e texto para exibir ao associado (o motivo interno da análise não é exposto). */
   presentation: OperationPresentation
   people: { name: string; role: HouseholdRole }[]
-  /** Número do comprovante, quando já emitido. */
+  /** Número do comprovante, quando já emitido. Preferir `receipt` quando presente. */
   receiptNumber: string | null
+  /** Comprovante definitivo (só existe após confirmação válida). */
+  receipt: ReceiptSummary | null
+  /** Último estado conhecido por canal (e-mail / WhatsApp). */
+  notifications: NotificationSummary[]
+  /** Instante da confirmação (ms), quando houver. */
+  paidAt: number | null
   /** Cobrança mais recente da operação (para reexibir o Pix após recarregar a página). */
   payment: PaymentView | null
 }
@@ -232,6 +251,14 @@ export const getOperation = query({
       .query('receipts')
       .withIndex('by_operation', (q) => q.eq('operationId', operation._id))
       .first()
+    const notificationRows = await ctx.db
+      .query('notifications')
+      .withIndex('by_operation', (q) => q.eq('operationId', operation._id))
+      .collect()
+    const latestByChannel = new Map<string, (typeof notificationRows)[number]>()
+    for (const row of notificationRows.sort((a, b) => a._creationTime - b._creationTime)) {
+      latestByChannel.set(row.channel, row)
+    }
 
     const now = Date.now()
     const state = describeOperationState(operation, now)
@@ -253,6 +280,18 @@ export const getOperation = query({
       presentation: state.presentation,
       people: people.map((person) => ({ name: person.name, role: person.role })),
       receiptNumber: receipt?.receiptNumber ?? null,
+      receipt: receipt
+        ? {
+            receiptNumber: receipt.receiptNumber,
+            fileReady: receipt.fileStorageId !== undefined,
+          }
+        : null,
+      notifications: [...latestByChannel.values()].map((row) => ({
+        channel: row.channel,
+        status: row.status,
+        failureReason: row.failureReason ?? null,
+      })),
+      paidAt: operation.paidAt ?? null,
       payment: latestTransaction ? buildPaymentView(operation, latestTransaction, now) : null,
     }
   },
@@ -370,5 +409,75 @@ export const startPayment = action({
             : {}),
       },
     })
+  },
+})
+
+export interface ReceiptDownloadResult {
+  receiptNumber: string
+  /** URL temporária do File Storage (não permanente e sem listagem pública). */
+  url: string
+}
+
+/**
+ * Download autorizado do PDF. Exige a mesma credencial da operação. Não gera outro comprovante.
+ * Operações em análise ou sem confirmação recebem `receipt_not_available`.
+ */
+export const getReceiptDownloadUrl = action({
+  args: {
+    operationId: v.id('paymentOperations'),
+    accessToken: v.string(),
+  },
+  handler: async (ctx, args): Promise<ReceiptDownloadResult> => {
+    if (args.accessToken.length === 0 || args.accessToken.length > 128) {
+      throw publicError('operation_not_found')
+    }
+    const access = await ctx.runQuery(internal.notifications.receiptAccess.resolveDownload, {
+      operationId: args.operationId,
+      accessTokenHash: await hashAccessToken(args.accessToken),
+    })
+    if (access.kind === 'not_found') throw publicError('operation_not_found')
+    if (access.kind === 'unavailable') throw publicError('receipt_not_available')
+    if (access.kind === 'not_ready') throw publicError('receipt_file_not_ready')
+
+    const url = await ctx.storage.getUrl(access.storageId)
+    if (!url) throw publicError('receipt_file_not_ready')
+    return { receiptNumber: access.receiptNumber, url }
+  },
+})
+
+export interface RequestReceiptEmailResult {
+  status: 'queued' | 'already_sent' | 'in_progress'
+}
+
+/**
+ * Solicita (re)envio do e-mail do comprovante. Não altera estado financeiro e não reemite PDF.
+ * Só aceita operação confirmada com comprovante. Idempotente: se já enviado/pendente, informa.
+ */
+export const requestReceiptEmail = action({
+  args: {
+    operationId: v.id('paymentOperations'),
+    accessToken: v.string(),
+  },
+  handler: async (ctx, args): Promise<RequestReceiptEmailResult> => {
+    if (args.accessToken.length === 0 || args.accessToken.length > 128) {
+      throw publicError('operation_not_found')
+    }
+    const access = await ctx.runQuery(internal.notifications.receiptAccess.resolveDownload, {
+      operationId: args.operationId,
+      accessTokenHash: await hashAccessToken(args.accessToken),
+    })
+    if (access.kind === 'not_found') throw publicError('operation_not_found')
+    if (access.kind === 'unavailable') throw publicError('receipt_not_available')
+    // Arquivo ainda gerando: mesmo assim o registro do comprovante existe e o e-mail pode
+    // ser enfileirado; o anexo usa URL quando o PDF já estiver pronto.
+
+    const result = await ctx.runMutation(internal.notifications.outbox.enqueueReceiptEmailRetry, {
+      operationId: args.operationId,
+      receiptId: access.receiptId,
+    })
+    if (result.queued) return { status: 'queued' }
+    if (result.status === 'sent') throw publicError('email_already_sent')
+    if (result.status === 'pending') throw publicError('email_in_progress')
+    return { status: 'queued' }
   },
 })

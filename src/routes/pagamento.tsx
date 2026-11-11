@@ -27,6 +27,9 @@ function PaymentRoute() {
         await navigate({ to: '/', search: { motivo: 'sessao-expirada' }, replace: true })
         journey.end()
       }}
+      onOutcomeReady={async () => {
+        await navigate({ to: '/comprovante', replace: true })
+      }}
     />
   )
 }

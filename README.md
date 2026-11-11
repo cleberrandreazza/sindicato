@@ -4,11 +4,10 @@ Aplicação web pública para pagamento da taxa médica de utilização das pisc
 (R$ 30 por pessoa), sem criação de conta. O associado informa carteirinha e CPF, seleciona as
 pessoas e a data de utilização e paga via Pix ou cartão em até 15 minutos.
 
-> **Estado atual:** backend completo e as **cinco primeiras telas da jornada** (identificação,
-> seleção, data, resumo/criação da operação e checkout Pix/cartão com PaymentProvider **mockado**),
-> com testes automatizados. Nenhum pagamento real é processado. Integrações reais (cadastro do
-> sindicato, Stripe, e-mail/WhatsApp) ainda não existem. Este projeto **não** é um sistema geral
-> de reservas.
+> **Estado atual:** backend completo e as **seis etapas da jornada** (identificação, seleção,
+> data, resumo, checkout mock e comprovante/notificações), com testes automatizados. PDF e e-mail
+> usam adaptadores **mockados** (nenhum e-mail real); WhatsApp está só preparado (`not_configured`).
+> Stripe real ainda não existe. Este projeto **não** é um sistema geral de reservas.
 
 | Etapa da jornada      | Situação                                                                           |
 | --------------------- | ---------------------------------------------------------------------------------- |
@@ -17,6 +16,7 @@ pessoas e a data de utilização e paga via Pix ou cartão em até 15 minutos.
 | 3. Data de utilização | Implementada (`/data`); regra **provisória**: qualquer data de hoje em diante      |
 | 4. Resumo             | Implementada (`/resumo`); cria a operação no backend com idempotência              |
 | 5. Pagamento          | Implementada (`/pagamento`); Pix/cartão **simulados** (mock); Stripe real pendente |
+| 6. Comprovante        | Implementada (`/comprovante`); PDF + e-mail **mock**; WhatsApp preparado           |
 | 6. Comprovante        | Não implementada (backend gera o comprovante; falta a tela e o envio real)         |
 
 ## Stack
@@ -138,6 +138,14 @@ selecionadas e data escolhida. Ao confirmar ("Continuar para pagamento"), o fron
 
 Organização: `src/features/summary/` (`api/`, `lib/`, `hooks/`, `components/`).
 
+### Comprovante e notificações (etapa 6)
+
+Após confirmação válida (`paid` + `confirmed`), o backend emite o comprovante (`SC-AAAA-NNNNNN`),
+gera PDF no Convex File Storage e agenda e-mail via `NotificationProvider` mock. WhatsApp fica
+`not_configured` (nenhum envio). Pagamento tardio **não** emite comprovante definitivo.
+
+Rotas: `/comprovante`. Download: `getReceiptDownloadUrl`. Reenvio: `requestReceiptEmail`.
+
 ### Tela de pagamento (checkout simulado)
 
 A rota `/pagamento` é a quinta etapa ("Finalize seu pagamento"). Exige operação criada em memória
@@ -238,8 +246,7 @@ src/
     ui/           componentes shadcn/ui
     shared/       componentes reutilizáveis do projeto
     layout/       estrutura das telas da jornada (JourneyLayout)
-  features/       módulos por funcionalidade: identification, selection, usage-date, summary e
-                  payment (checkout mock); previstos: receipts, admin
+  features/       identification, selection, usage-date, summary, payment e receipt; previsto: admin
   lib/            utilitários e configuração (cn, env, cliente Convex, with-timeout, public-error)
   services/       adaptadores do frontend (chamadas ao Convex), quando necessário
   types/          tipos compartilhados

@@ -57,6 +57,9 @@ const awaitingView = (patch: Partial<OperationView> = {}): OperationView => ({
     { name: 'Fernanda Modelo Lima', role: 'child' },
   ],
   receiptNumber: null,
+  receipt: null,
+  notifications: [],
+  paidAt: null,
   payment: null,
   ...patch,
 })
@@ -100,7 +103,8 @@ const cardApproved = (): StartPaymentResult => ({
     financialStatus: 'paid',
     presentation: {
       code: 'confirmed',
-      message: 'Pagamento confirmado. O comprovante será enviado por e-mail e WhatsApp.',
+      message:
+        'Pagamento confirmado. O comprovante está disponível para download e será enviado por e-mail.',
     },
   },
 })
@@ -236,7 +240,8 @@ describe('PaymentPage', () => {
           operationalStatus: 'confirmed',
           presentation: {
             code: 'confirmed',
-            message: 'Pagamento confirmado. O comprovante será enviado por e-mail e WhatsApp.',
+            message:
+              'Pagamento confirmado. O comprovante está disponível para download e será enviado por e-mail.',
           },
           payment: cardApproved().payment,
         }),

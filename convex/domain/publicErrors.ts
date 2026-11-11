@@ -62,6 +62,12 @@ export const PUBLIC_ERROR_MESSAGES = {
   invalid_payment_method:
     'Forma de pagamento inválida. Para cartão, use o token gerado pelo provedor; Pix não usa token.',
   invalid_payment_token: 'Não foi possível processar os dados do cartão. Revise e tente novamente.',
+  // Comprovante / notificações
+  receipt_not_available: 'O comprovante definitivo ainda não está disponível para esta operação.',
+  receipt_file_not_ready:
+    'O arquivo do comprovante ainda está sendo preparado. Tente novamente em instantes.',
+  email_already_sent: 'O comprovante já foi enviado por e-mail.',
+  email_in_progress: 'O envio do e-mail já está em andamento. Aguarde alguns instantes.',
 } as const
 
 export type PublicErrorCode = keyof typeof PUBLIC_ERROR_MESSAGES

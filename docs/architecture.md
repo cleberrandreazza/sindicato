@@ -70,8 +70,8 @@ convex/
     cpf.ts, privacy.ts, idempotency.ts
   public/             ÚNICA superfície pública (guardada por teste)
     members.ts        lookup (action), validateSelection (query)
-    payments.ts       checkDuplicates (query), createOperation (mutation), getOperation (query),
-                      startPayment (action: cria a cobrança Pix/cartão)
+    payments.ts       checkDuplicates, createOperation, getOperation, startPayment,
+                      getReceiptDownloadUrl, requestReceiptEmail
   dev/
     simulate.ts       (interna, só APP_ENV=development + mock) simula o provedor via webhook assinado
   security/
@@ -210,6 +210,10 @@ orientam a correção sem criar operação. Sessão expirada volta à identifica
 reinicia ao trocar de método). Pix: QR/código demonstrativos; confirmação só via
 `dev/simulate:simulatePayment` (interna). Cartão: tokens `tok_mock_*`, sem dados reais. Nenhum
 endpoint público confirma pagamento. Stripe real: ver integrations.md.
+
+**Etapa 6 (`/comprovante`): comprovante e notificações.** Sucesso após `confirmed` (PDF + e-mail
+mock); tela de análise para `under_review` / pagamento tardio (sem PDF definitivo). WhatsApp
+`not_configured`.
 
 **Regras da interface (a interface não decide regras):**
 
@@ -362,18 +366,20 @@ O registro do evento e o processamento ocorrem na **mesma transação**. Detalhe
 cenários e tratamento de eventos desconhecidos em
 [business-rules.md](./business-rules.md#tratamento-de-pagamentos-e-confirmações).
 
-### 5. Notificações (parcialmente futuro)
+### 5. Comprovante PDF e notificações
 
-Uma action por canal e por tipo, independentes entre si:
+Após `applyConfirmation` → `confirmed`:
 
-- `confirmed` → comprovante por e-mail e WhatsApp (`kind: receipt`).
-- `under_review` → atualização por e-mail e WhatsApp (`kind: payment_under_review`) com a
-  mensagem de `domain/messages.ts` (`LATE_PAYMENT_MESSAGE` quando o motivo é atraso).
-- Conclusão da análise: também deverá notificar o associado (texto a definir com o sindicato).
+1. `issueReceipt` (número único `SC-AAAA-NNNNNN`).
+2. Agenda `notifications/outbox:afterConfirmed`.
+3. `ensureReceiptPdf` gera PDF (texto puro, sem `"use node"`) no Convex File Storage.
+4. Outbox de e-mail (`pending` → `deliverReceiptEmail` → `sent`/`failed`).
+5. WhatsApp: registro `not_configured` (sem envio).
 
-Cada tentativa gera uma linha em `notifications`. O destino real é lido do titular no momento
-do envio. Contratos já existem (`sendReceipt*`, `sendPaymentUpdate*`); as actions de envio serão
-implementadas junto com as integrações.
+`under_review` (pagamento tardio): `afterUnderReview` (e-mail de atualização mock; WhatsApp
+`not_configured`); **sem** PDF definitivo. Falha de notificação **nunca** reverte financeiro.
+
+Download: `public/payments:getReceiptDownloadUrl` (URL temporária após validar `accessToken`).
 
 ## API pública (contrato com o frontend)
 
@@ -667,8 +673,8 @@ exercitadas com a validação injetada por props; nenhum teste chama um backend 
 | `MemberProvider` real       | Acesso ao cadastro do sindicato; **identificador estável e único de pessoa** (`personId`)                    |
 | `PaymentProvider` real      | Conta e chaves do provedor (Stripe), webhook público                                                         |
 | Registro da transação       | Garantir que toda cobrança criada no provedor tenha linha local (webhook de cobrança desconhecida só alerta) |
-| `NotificationProvider` real | Provedor de e-mail e WhatsApp Business (templates aprovados)                                                 |
-| Comprovante em PDF          | Layout e dados oficiais do sindicato                                                                         |
+| `NotificationProvider` real | Provedor de e-mail e WhatsApp Business (templates; WhatsApp ainda `not_configured`)                          |
+| Layout oficial do PDF       | Dados institucionais definitivos do sindicato (CNPJ/endereço quando fornecidos)                              |
 | Painel administrativo       | Autenticação; consome `paymentReviews.by_status` e `providerEvents.by_alert_status`                          |
 | Regras de uso               | Dias, horários, antecedência, isenções, faixas etárias                                                       |
 | Proteção contra abuso       | CAPTCHA/Turnstile e/ou proxy com a origem (limites por IP); os limites atuais são só por carteirinha/global  |
