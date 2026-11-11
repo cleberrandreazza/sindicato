@@ -22,12 +22,28 @@ pessoas e a data de utilização e paga via Pix ou cartão em até 15 minutos.
 
 React · TypeScript (strict) · Vite · TanStack Router · Tailwind CSS v4 · shadcn/ui · Convex
 
+## Ambientes
+
+| Ambiente     | Frontend          | Backend Convex                        | Providers                      |
+| ------------ | ----------------- | ------------------------------------- | ------------------------------ |
+| Local        | Vite (`pnpm dev`) | Deployment de desenvolvimento         | Mock (`APP_ENV=development`)   |
+| Demonstração | Vercel (HTTPS)    | **Deployment separado** (não o local) | Mock (`APP_ENV=demonstration`) |
+| Produção     | Vercel (futuro)   | Deployment de produção                | Reais; mocks **recusados**     |
+
+O frontend recebe a URL do Convex via `VITE_CONVEX_URL` (única variável `VITE_*` usada pelo
+código). Segredos ficam só no deployment Convex. Guia completo:
+[docs/deployment-guide.md](docs/deployment-guide.md).
+
+> A demonstração hospedada **ainda não está publicada** neste repositório até existir uma URL
+> HTTPS externa validada. Este commit prepara a configuração; não substitui o Convex local.
+
 ## Documentação
 
 - [Regras de negócio](docs/business-rules.md) (confirmadas, pendentes, seleção, data, resumo/operação, estados, pagamento tardio, duplicidade, mensagens)
 - [Arquitetura](docs/architecture.md)
 - [Modelo de dados](docs/data-model.md)
 - [Integrações externas](docs/integrations.md)
+- [Guia de deployment (demonstração / Vercel)](docs/deployment-guide.md)
 - [Relatório de homologação](docs/homologation-report.md) (auditoria da 1ª entrega)
 - [Prontidão para apresentação](docs/presentation-readiness.md) (diretoria / sindicato)
 - [Apresentação institucional (slides)](docs/presentation/index.html) · [índice](docs/presentation.md)
@@ -173,9 +189,10 @@ Organização: `src/features/payment/`.
 Ficam **somente** no deployment Convex (`pnpm exec convex env …`), **não** no `.env.local`
 (este arquivo só carrega `VITE_CONVEX_URL` / `CONVEX_DEPLOYMENT` para o frontend e o CLI).
 
-**Novo projeto Convex:** o deployment nasce **sem** variáveis. Sem `APP_ENV=development` (e
-sem `CPF_HASH_SECRET`), a identificação responde `service_unavailable` / “falha no
-MemberProvider” com `code: configuration`. Isso **não** é bug do mock: é configuração ausente.
+**Novo projeto Convex:** o deployment nasce **sem** variáveis. Sem `APP_ENV=development` ou
+`demonstration` (e sem `CPF_HASH_SECRET`), a identificação responde `service_unavailable` /
+“falha no MemberProvider” com `code: configuration`. Isso **não** é bug do mock: é configuração
+ausente.
 
 Para desenvolvimento local (rode uma vez após criar ou trocar o deployment):
 
@@ -200,11 +217,22 @@ pnpm exec convex run public/members:lookup '{"membershipNumber":"100001","cpf":"
 `OPERATION_TOKEN_SECRET_PREVIOUS` e grave o novo em `OPERATION_TOKEN_SECRET`. Detalhes em
 [docs/architecture.md](docs/architecture.md).
 
-Com `APP_ENV=development`, os providers usam mocks por padrão (mesmo sem
-`MEMBER_PROVIDER=mock`). Sem `APP_ENV=development`, mocks são **recusados** (proteção contra uso
-acidental em produção). Detalhes em [docs/integrations.md](docs/integrations.md).
+Com `APP_ENV=development` ou `APP_ENV=demonstration`, os providers usam mocks por padrão (mesmo
+sem `MEMBER_PROVIDER=mock`). Qualquer outro valor (incluindo ausência) **recusa** mocks
+(proteção contra uso acidental em produção). Detalhes em
+[docs/integrations.md](docs/integrations.md). Demonstração hospedada:
+[docs/deployment-guide.md](docs/deployment-guide.md).
 
-## Dados fictícios de teste (somente desenvolvimento)
+## Demonstração para a diretoria
+
+Enquanto não houver URL Vercel validada, use o ambiente local ou o roteiro em
+[docs/demo-script.md](docs/demo-script.md). Quando a demo estiver no ar:
+
+1. Acesse a URL HTTPS da Vercel (pública ou com proteção de deployment, conforme o plano).
+2. Use somente os [dados fictícios](#dados-fictícios-de-teste-somente-desenvolvimento) abaixo.
+3. Checkout é **simulado**; não há pagamento real nem WhatsApp/e-mail reais.
+
+## Dados fictícios de teste (somente desenvolvimento / demonstração)
 
 Fornecidos pelo `MemberProvider` mock (`convex/providers/mock/mockMembers.ts`). Nomes,
 telefones e e-mails (`example.com`) são inventados; os CPFs foram gerados algoritmicamente para
@@ -224,8 +252,8 @@ para testar que a mesma pessoa não paga duas vezes na mesma data, mesmo por tit
 Para experimentar a API pública (`convex/public/`), consulte com carteirinha e CPF acima; o
 contrato completo está em [docs/architecture.md](docs/architecture.md#api-pública-contrato-com-o-frontend).
 Operações podem ser criadas, consultadas e **cobradas** (`startPayment`, Pix ou cartão com token
-fictício). Nenhum pagamento acontece sozinho: para "pagar" no desenvolvimento use a simulação
-interna (só com `APP_ENV=development` e provider mock):
+fictício). Nenhum pagamento acontece sozinho: para "pagar" no desenvolvimento ou na demonstração
+use a simulação interna (só com `APP_ENV=development|demonstration` e provider mock):
 
 ```bash
 npx convex run dev/simulate:simulatePayment '{"operationId":"<id>","outcome":"approved"}'

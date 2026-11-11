@@ -6,6 +6,33 @@ campestre: R$ 30,00 por pessoa, via Pix ou cartão, com 15 minutos para concluir
 > Escopo: **não** é um sistema de reservas. Não há agenda, disponibilidade, lotação nem outros
 > espaços. Regras em [business-rules.md](./business-rules.md).
 
+## Ambientes (desenvolvimento × demonstração × produção)
+
+```mermaid
+flowchart LR
+  subgraph Local
+    FE_L[Vite localhost]
+    CV_L[Convex dev]
+  end
+  subgraph Demo
+    FE_D[Vercel HTTPS]
+    CV_D[Convex demonstration]
+  end
+  FE_L -->|VITE_CONVEX_URL| CV_L
+  FE_D -->|VITE_CONVEX_URL| CV_D
+```
+
+| Ambiente        | Hospedagem frontend | Convex                        | `APP_ENV`       | Dados / providers      |
+| --------------- | ------------------- | ----------------------------- | --------------- | ---------------------- |
+| Desenvolvimento | Vite local          | Deployment de desenvolvimento | `development`   | Fictícios + mocks      |
+| Demonstração    | Vercel              | Deployment **separado**       | `demonstration` | Fictícios + mocks      |
+| Produção        | Vercel (futuro)     | Deployment de produção        | ≠ mock-allowed  | Reais; mocks recusados |
+
+- O frontend **nunca** embute segredos: só `VITE_CONVEX_URL` (ver `src/lib/env.ts`).
+- SPA na Vercel: [`vercel.json`](../vercel.json) reescreve rotas para `index.html` (TanStack Router).
+- Guia operacional: [deployment-guide.md](./deployment-guide.md).
+- **Não** reutilizar automaticamente o Convex local como backend da URL pública de demo.
+
 ## Camadas
 
 ```mermaid
@@ -73,7 +100,7 @@ convex/
     payments.ts       checkDuplicates, createOperation, getOperation, startPayment,
                       getReceiptDownloadUrl, requestReceiptEmail
   dev/
-    simulate.ts       (interna, só APP_ENV=development + mock) simula o provedor via webhook assinado
+    simulate.ts       (interna, só APP_ENV=development|demonstration + mock) simula o provedor via webhook assinado
   security/
     rateLimit.ts      contadores de janela fixa e purga agendada
   members/

@@ -535,9 +535,10 @@ recusa sem `APP_ENV=development`).
   navegador escolhe o resultado pelo token (simula o SDK); com um provedor real o resultado é do
   provedor.
 - **Pix:** o "copia e cola" e o QR são fictícios e não pagáveis; nenhum banco os reconhece.
-- **Simulação de pagamento:** só por `dev/simulate:simulatePayment` (interna, CLI/painel). Nenhum
-  pagamento acontece sozinho. O mock não tem relógio: "pagamento tardio" é simulado com
-  `approved_after_expiry` ou avançando o relógio.
+- **Simulação de pagamento:** só por `dev/simulate:simulatePayment` (interna, CLI/painel; exige
+  `APP_ENV=development` ou `demonstration` + provider mock). Nenhum pagamento acontece sozinho. O
+  mock não tem relógio: "pagamento tardio" é simulado com `approved_after_expiry` ou avançando o
+  relógio.
 - **Cobranças órfãs:** se a action cair depois de o provedor criar a cobrança e antes de gravá-la
   localmente, a retomada (mesma chave de idempotência) recupera a mesma cobrança; se ninguém
   retomar, um webhook posterior dessa cobrança vira `unknown_transaction` + alerta. Não há
@@ -556,3 +557,22 @@ recusa sem `APP_ENV=development`).
   cadastral) e fica sem prova de identificação, em vez de erro genérico.
 - Os limites acima são salvaguardas técnicas, **não** regras de negócio do sindicato
   (`convex/domain/limits.ts`).
+
+## Regras da demonstração institucional (hospedada)
+
+Ambiente separado do desenvolvimento local e da futura produção. Detalhes operacionais em
+[deployment-guide.md](./deployment-guide.md).
+
+| Regra                                   | Aplicação                                                                     |
+| --------------------------------------- | ----------------------------------------------------------------------------- |
+| Somente associados fictícios            | `MemberProvider` mock; carteirinhas da tabela do README                       |
+| Nenhum CPF real                         | CPFs algoritmicamente gerados para teste                                      |
+| Nenhum pagamento real                   | `PAYMENT_PROVIDER=mock`; tokens/QR não bancários                              |
+| Nenhuma integração WhatsApp/e-mail real | `NOTIFICATION_PROVIDER=mock`; WhatsApp `not_configured`                       |
+| Confirmação financeira fechada          | API pública não confirma; simulação só `internal`                             |
+| Separação de deployments                | Convex de demo ≠ Convex local; sem dados reais no demo                        |
+| `APP_ENV`                               | `demonstration` (ou `development` local) para mocks; produção futura sem mock |
+
+**Limites dos pagamentos simulados:** valor e prazo seguem as regras de negócio (R$ 30/pessoa,
+15 minutos); o “pagamento” não liquida dinheiro. Cartão mock aprova/recusa conforme token; Pix
+mock fica pendente até simulação autorizada na CLI/Dashboard.

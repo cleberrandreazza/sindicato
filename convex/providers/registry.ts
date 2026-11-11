@@ -1,3 +1,4 @@
+import { allowsMockProviders } from './appEnv'
 import { ProviderError } from './errors'
 import type { MemberProvider } from './memberProvider'
 import { MockMemberProvider } from './mock/mockMemberProvider'
@@ -32,16 +33,16 @@ function resolveProvider<T>(
   factories: Factories<T>,
   env: ProviderEnv,
 ): T {
-  const isDevelopment = env.APP_ENV === 'development'
-  const selected = env[envKey] ?? (isDevelopment ? 'mock' : undefined)
+  const mocksAllowed = allowsMockProviders(env)
+  const selected = env[envKey] ?? (mocksAllowed ? 'mock' : undefined)
 
   if (!selected) {
     throw new ProviderError('configuration', `Defina ${envKey} para o provider de ${label}.`)
   }
-  if (selected === 'mock' && !isDevelopment) {
+  if (selected === 'mock' && !mocksAllowed) {
     throw new ProviderError(
       'configuration',
-      `${envKey}=mock só é permitido com APP_ENV=development.`,
+      `${envKey}=mock só é permitido com APP_ENV=development ou APP_ENV=demonstration.`,
     )
   }
 
@@ -62,8 +63,8 @@ export function getPaymentProvider(env: ProviderEnv = process.env): PaymentProvi
 
 /**
  * Resolve os providers a partir do ambiente do deployment Convex.
- * Seguro por padrão: sem `APP_ENV=development`, mocks são recusados e a ausência de
- * configuração gera erro em vez de cair silenciosamente em dados simulados.
+ * Seguro por padrão: sem `APP_ENV=development` ou `demonstration`, mocks são recusados e a
+ * ausência de configuração gera erro em vez de cair silenciosamente em dados simulados.
  */
 export function getProviders(env: ProviderEnv = process.env): Providers {
   return {

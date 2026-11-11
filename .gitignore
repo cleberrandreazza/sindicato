@@ -5,6 +5,7 @@ dist
 .env.*
 !.env.example
 .vite
+.vercel
 *.tsbuildinfo
 .DS_Store
 npm-debug.log*

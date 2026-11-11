@@ -695,6 +695,13 @@ describe('public/payments:startPayment — idempotência', () => {
     expect(data.code).toBe('service_unavailable')
     expect(await loadTransactions(t, created.operationId)).toHaveLength(0)
   })
+
+  it('APP_ENV=demonstration permite checkout mock (ambiente de demo hospedada)', async () => {
+    vi.stubEnv('APP_ENV', 'demonstration')
+    const result = await startPayment(t, created, 'pix')
+    expect(result.payment.status).toBe('pending')
+    expect(await loadTransactions(t, created.operationId)).toHaveLength(1)
+  })
 })
 
 describe('simulação de desenvolvimento e confirmação', () => {
@@ -897,7 +904,7 @@ describe('simulação de desenvolvimento e confirmação', () => {
 })
 
 describe('proteção contra confirmação não autorizada', () => {
-  it('a simulação recusa rodar fora de APP_ENV=development, sem alterar nada', async () => {
+  it('a simulação recusa rodar fora de APP_ENV mock-allowed, sem alterar nada', async () => {
     await startPayment(t, created, 'pix')
     const before = await loadOperation(t, created.operationId)
     vi.stubEnv('APP_ENV', 'production')
@@ -905,6 +912,13 @@ describe('proteção contra confirmação não autorizada', () => {
     expect(data.code).toBe('simulation_disabled')
     expect(await loadOperation(t, created.operationId)).toEqual(before)
     expect(await loadProviderEvents(t)).toHaveLength(0)
+  })
+
+  it('a simulação aceita APP_ENV=demonstration com provider mock', async () => {
+    await startPayment(t, created, 'pix')
+    vi.stubEnv('APP_ENV', 'demonstration')
+    const run = await simulate(t, created.operationId, 'approved')
+    expect(run.notification).toMatchObject({ status: 'accepted', outcome: 'confirmed' })
   })
 
   it('a simulação recusa rodar com provider diferente do mock', async () => {

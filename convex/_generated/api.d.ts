@@ -40,6 +40,7 @@ import type * as payments_providerEvents from "../payments/providerEvents.js";
 import type * as payments_receipts from "../payments/receipts.js";
 import type * as payments_reviews from "../payments/reviews.js";
 import type * as payments_webhookProcessor from "../payments/webhookProcessor.js";
+import type * as providers_appEnv from "../providers/appEnv.js";
 import type * as providers_errors from "../providers/errors.js";
 import type * as providers_memberProvider from "../providers/memberProvider.js";
 import type * as providers_mock_mockMemberProvider from "../providers/mock/mockMemberProvider.js";
@@ -94,6 +95,7 @@ declare const fullApi: ApiFromModules<{
   "payments/receipts": typeof payments_receipts;
   "payments/reviews": typeof payments_reviews;
   "payments/webhookProcessor": typeof payments_webhookProcessor;
+  "providers/appEnv": typeof providers_appEnv;
   "providers/errors": typeof providers_errors;
   "providers/memberProvider": typeof providers_memberProvider;
   "providers/mock/mockMemberProvider": typeof providers_mock_mockMemberProvider;

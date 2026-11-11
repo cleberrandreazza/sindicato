@@ -52,9 +52,9 @@ lookupMember({ membershipNumber, cpf }): Promise<
     `service_unavailable` para o navegador; só o código do erro é registrado em log, sem carteirinha
     nem CPF.
   - `found: false` e CPF divergente produzem **a mesma resposta** pública.
-  - Variáveis de ambiente necessárias no deployment: `APP_ENV` (`development` para usar mocks),
-    `CPF_HASH_SECRET` (≥ 16 caracteres; sem ele a consulta responde `service_unavailable`),
-    `MEMBER_PROVIDER` quando diferente do padrão.
+  - Variáveis de ambiente necessárias no deployment: `APP_ENV` (`development` ou
+    `demonstration` para usar mocks), `CPF_HASH_SECRET` (≥ 16 caracteres; sem ele a consulta
+    responde `service_unavailable`), `MEMBER_PROVIDER` quando diferente do padrão.
   - O contrato assume que `phone`/`email` do provider são usados só no backend (comprovante); a API
     pública não os devolve.
 
@@ -162,12 +162,13 @@ Como cada requisito da integração futura é atendido:
   `creating` órfãs (ver [business-rules.md](./business-rules.md#limitações-do-mock)).
 - Comprovante PDF + e-mail mock + WhatsApp preparado (`not_configured`): ver seção ao final.
 
-## Simulação de pagamento (somente desenvolvimento)
+## Simulação de pagamento (desenvolvimento e demonstração)
 
 `convex/dev/simulate.ts` faz o papel do provedor. É `internalAction`: não aparece na API do
-navegador, e ainda assim recusa rodar sem `APP_ENV=development` ou com provider diferente do mock
-(`simulation_disabled`). Monta uma notificação **assinada** e a entrega ao mesmo processador do
-webhook, de modo que exercita assinatura, registro, idempotência e regras de prazo/valor/análise.
+navegador, e ainda assim recusa rodar sem `APP_ENV=development|demonstration` ou com provider
+diferente do mock (`simulation_disabled`). Monta uma notificação **assinada** e a entrega ao mesmo
+processador do webhook, de modo que exercita assinatura, registro, idempotência e regras de
+prazo/valor/análise.
 
 ```bash
 # Painel do Convex (Functions) ou CLI. `outcome`: approved | declined | pending | approved_after_expiry
@@ -215,18 +216,29 @@ Variáveis do **deployment Convex** (não do `.env.local`). Um deployment novo c
 `convex env list` sem nomes → `getProviders()` lança `ProviderError('configuration')` no lookup
 (`Defina MEMBER_PROVIDER…` ou mock recusado), e a API pública devolve `service_unavailable`.
 
-| Variável                          | Valores                      | Observação                                                                                                                                                  |
-| --------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `APP_ENV`                         | `development`                | **Obrigatório** para mocks. Sem isso, mocks são **recusados** e nada é assumido por padrão.                                                                 |
-| `MEMBER_PROVIDER`                 | `mock`                       | Em `development`, o padrão é `mock` se a variável estiver ausente; definir deixa explícito.                                                                 |
-| `PAYMENT_PROVIDER`                | `mock` (futuro: `stripe`)    | idem                                                                                                                                                        |
-| `NOTIFICATION_PROVIDER`           | `mock`                       | idem                                                                                                                                                        |
-| `CPF_HASH_SECRET`                 | string ≥ 16 chars            | Segredo do HMAC do CPF (`domain/privacy.ts`). Sem ele, lookup também falha com `service_unavailable`.                                                       |
-| `OPERATION_TOKEN_SECRET`          | string ≥ 32 chars            | Deriva o `accessToken` quando `createOperation` usa `requestId` (`domain/idempotency.ts`). Sem ele, criação com `requestId` responde `service_unavailable`. |
-| `OPERATION_TOKEN_SECRET_PREVIOUS` | string ≥ 32 chars (opcional) | Segredo anterior durante a rotação; a repetição testa os dois.                                                                                              |
+| Variável                          | Valores                          | Observação                                                                                                                                                  |
+| --------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_ENV`                         | `development` \| `demonstration` | **Obrigatório** para mocks. Qualquer outro valor (ou ausência) **recusa** mocks. `demonstration` = Convex dedicado à demo hospedada (dados fictícios).      |
+| `MEMBER_PROVIDER`                 | `mock`                           | Com mocks permitidos, o padrão é `mock` se a variável estiver ausente; definir deixa explícito.                                                             |
+| `PAYMENT_PROVIDER`                | `mock` (futuro: `stripe`)        | idem                                                                                                                                                        |
+| `NOTIFICATION_PROVIDER`           | `mock`                           | idem                                                                                                                                                        |
+| `CPF_HASH_SECRET`                 | string ≥ 16 chars                | Segredo do HMAC do CPF (`domain/privacy.ts`). Sem ele, lookup também falha com `service_unavailable`.                                                       |
+| `OPERATION_TOKEN_SECRET`          | string ≥ 32 chars                | Deriva o `accessToken` quando `createOperation` usa `requestId` (`domain/idempotency.ts`). Sem ele, criação com `requestId` responde `service_unavailable`. |
+| `OPERATION_TOKEN_SECRET_PREVIOUS` | string ≥ 32 chars (opcional)     | Segredo anterior durante a rotação; a repetição testa os dois.                                                                                              |
+
+**Frontend (Vite / Vercel):** apenas `VITE_CONVEX_URL` (URL do Convex do ambiente). Não use
+`VITE_*` para segredos. `VITE_CONVEX_SITE_URL` não é lida pelo código.
 
 Dados fictícios do `MockMemberProvider` (ex.: carteirinha `100001` / CPF `100.000.001-08`) só
-respondem depois que `APP_ENV=development` habilita o mock — não precisam de seed no banco.
+respondem depois que `APP_ENV` permite mocks — não precisam de seed no banco.
+
+### Limitações do ambiente de demonstração hospedada
+
+- Providers mockados: nenhum Stripe, WhatsApp ou e-mail real.
+- URL pública na Vercel permite iniciar cobranças **simuladas** no Convex de demo; confirmação Pix
+  via navegador continua impossível (`simulatePayment` é interna).
+- Proteção por senha, se desejada, deve ser da **hospedagem** (Vercel Deployment Protection), não
+  autenticação improvisada no React. Ver [deployment-guide.md](./deployment-guide.md).
 
 Para adicionar uma integração real:
 
@@ -241,12 +253,12 @@ Nenhuma regra de negócio muda.
 
 A tela `/pagamento` usa o **mock**:
 
-| Cenário                                              | Como exercitar                                                                                                                           |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Pix pendente + QR demonstrativo                      | `startPayment` com `paymentMethod: 'pix'`                                                                                                |
-| Pix aprovado / recusado / tardio                     | CLI: `npx convex run dev/simulate:simulatePayment '{"operationId":"…","outcome":"approved"}'` (só `APP_ENV=development` + provider mock) |
-| Cartão aprovado / recusado / pendente / indisponível | tokens `tok_mock_approved`, `tok_mock_declined`, `tok_mock_pending`, `tok_mock_unavailable`                                              |
-| Idempotência                                         | repetir `startPayment` com a mesma forma → `reused: true`                                                                                |
+| Cenário                                              | Como exercitar                                                                                                                                          |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pix pendente + QR demonstrativo                      | `startPayment` com `paymentMethod: 'pix'`                                                                                                               |
+| Pix aprovado / recusado / tardio                     | CLI: `npx convex run dev/simulate:simulatePayment '{"operationId":"…","outcome":"approved"}'` (só `APP_ENV=development\|demonstration` + provider mock) |
+| Cartão aprovado / recusado / pendente / indisponível | tokens `tok_mock_approved`, `tok_mock_declined`, `tok_mock_pending`, `tok_mock_unavailable`                                                             |
+| Idempotência                                         | repetir `startPayment` com a mesma forma → `reused: true`                                                                                               |
 
 **Limitações da simulação:** QR/código Pix não são pagáveis; tokens de cartão não são dados
 bancários; não há webhook HTTP público; a simulação **não** está na superfície `convex/public/`

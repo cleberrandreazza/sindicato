@@ -3,6 +3,7 @@ import { internal } from '../_generated/api'
 import { internalAction } from '../_generated/server'
 import { processProviderNotification, type NotificationResult } from '../payments/webhookProcessor'
 import { MOCK_WEBHOOK_SIGNATURE } from '../providers/mock/mockPaymentProvider'
+import { allowsMockProviders } from '../providers/appEnv'
 import { getPaymentProvider } from '../providers/registry'
 
 /**
@@ -17,8 +18,8 @@ import { getPaymentProvider } from '../providers/registry'
  *
  *   npx convex run dev/simulate:simulatePayment '{"operationId":"…","outcome":"approved"}'
  *
- * Mesmo sendo interna, recusa rodar fora de `APP_ENV=development` ou com provider diferente do
- * mock, para que uma configuração de produção nunca consiga "pagar" uma operação.
+ * Mesmo sendo interna, recusa rodar fora de `APP_ENV=development|demonstration` ou com provider
+ * diferente do mock, para que uma configuração de produção nunca consiga "pagar" uma operação.
  *
  * Resultados (`outcome`):
  * - `approved`: recebimento agora (se o prazo já passou, é tardio, como na vida real);
@@ -49,7 +50,7 @@ export const simulatePayment = internalAction({
     eventId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<SimulationResult> => {
-    if (process.env.APP_ENV !== 'development') {
+    if (!allowsMockProviders()) {
       throw new ConvexError({ code: 'simulation_disabled' })
     }
     let providerName: string

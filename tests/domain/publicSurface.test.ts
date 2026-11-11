@@ -74,9 +74,9 @@ describe('superfície pública do backend', () => {
     }
   })
 
-  it('o código de simulação só roda com APP_ENV=development e provider mock', () => {
+  it('o código de simulação só roda com APP_ENV mock-allowed e provider mock', () => {
     const source = files.find(([path]) => path.endsWith('/convex/dev/simulate.ts'))?.[1] ?? ''
-    expect(source).toMatch(/APP_ENV !== 'development'/)
+    expect(source).toMatch(/allowsMockProviders/)
     expect(source).toMatch(/providerName !== 'mock'/)
   })
 
